@@ -27,13 +27,13 @@ async function main() {
       const result = await checkRelevance(story);
 
       if (result) {
-        console.log(`MATCH: ${story.title} - ${result.reason} (Score: ${result.score})`);
+        console.log(`MATCH: ${story.title} - ${result.reason}`);
         
         const fullStory: Story = {
           ...story,
           date: new Date().toISOString().split('T')[0], // YYYY-MM-DD
           reason: result.reason,
-          relevance_score: result.score,
+          relevance_score: 1, // Binary relevance (1 = relevant)
           notification_sent: false
         };
 
