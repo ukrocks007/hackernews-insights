@@ -11,8 +11,8 @@ export interface ScrapedStory {
   rank: number;
 }
 
-export async function scrapeTopStories(count: number = 30): Promise<ScrapedStory[]> {
-  console.log('Launching browser...');
+export async function scrapeTopStories(count: number = 30, pageNumber: number = 1): Promise<ScrapedStory[]> {
+  console.log(`Launching browser for page ${pageNumber}...`);
   const browser: Browser = await chromium.launch({
     headless: process.env.HEADLESS !== 'false', // Default to true
   });
@@ -26,8 +26,9 @@ export async function scrapeTopStories(count: number = 30): Promise<ScrapedStory
   const stories: ScrapedStory[] = [];
 
   try {
-    console.log('Navigating to Hacker News...');
-    await page.goto('https://news.ycombinator.com/', { waitUntil: 'domcontentloaded' });
+    const url = pageNumber === 1 ? 'https://news.ycombinator.com/' : `https://news.ycombinator.com/news?p=${pageNumber}`;
+    console.log(`Navigating to Hacker News (Page ${pageNumber})...`);
+    await page.goto(url, { waitUntil: 'domcontentloaded' });
 
     // Wait for the main table to load
     await page.waitForSelector('#hnmain');

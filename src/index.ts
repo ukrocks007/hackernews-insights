@@ -1,7 +1,8 @@
 import { initDB, closeDB, saveStory, hasStoryBeenProcessed, getUnsentRelevantStories, markStoryAsSent, Story } from './storage';
 import { scrapeTopStories } from './hnScraper';
-import { checkRelevance } from './relevanceAgent';
+import { checkRelevance, MIN_HN_SCORE, MAX_RANK } from './relevanceAgent';
 import { sendStoryNotification, sendErrorNotification, sendNotification } from './notifier';
+import { scrapeStoryContent } from './contentScraper';
 
 async function main() {
   try {
@@ -10,36 +11,81 @@ async function main() {
     // 1. Initialize Database
     await initDB();
 
-    // 2. Scrape Top Stories
-    const scrapedStories = await scrapeTopStories(30);
-    console.log(`Scraped ${scrapedStories.length} stories.`);
+    let relevantStoriesFound = 0;
+    let page = 1;
+    const MAX_PAGES = 6; // 1 initial + 5 retries
 
-    // 3. Process Stories (Filter & Save)
-    for (const story of scrapedStories) {
-      // Check if already processed to avoid duplicates and save LLM costs
-      const isProcessed = await hasStoryBeenProcessed(story.id);
-      if (isProcessed) {
-        console.log(`Story ${story.id} ("${story.title}") already processed. Skipping.`);
-        continue;
+    while (relevantStoriesFound === 0 && page <= MAX_PAGES) {
+      console.log(`--- Processing Page ${page} ---`);
+
+      // 2. Scrape Top Stories
+      const scrapedStories = await scrapeTopStories(30, page);
+      console.log(`Scraped ${scrapedStories.length} stories from page ${page}.`);
+
+      if (scrapedStories.length === 0) {
+        console.log('No stories found on this page. Stopping.');
+        break;
       }
 
-      console.log(`Checking relevance for: "${story.title}"...`);
-      const result = await checkRelevance(story);
+      // 3. Process Stories (Filter & Save)
+      for (const story of scrapedStories) {
+        // Check if already processed to avoid duplicates and save LLM costs
+        const isProcessed = await hasStoryBeenProcessed(story.id);
+        if (isProcessed) {
+          console.log(`Story ${story.id} ("${story.title}") already processed. Skipping.`);
+          continue;
+        }
 
-      if (result) {
-        console.log(`MATCH: ${story.title} - ${result.reason}`);
+        // Deterministic Pre-filtering
+        // if (story.rank > MAX_RANK) {
+        //   console.log(`Pre-filter: Rejected "${story.title}" (Rank ${story.rank} > ${MAX_RANK})`);
+        //   continue;
+        // }
+
+        if (story.score < MIN_HN_SCORE) {
+          console.log(`Pre-filter: Rejected "${story.title}" (Score ${story.score} < ${MIN_HN_SCORE})`);
+          continue;
+        }
+
+        // Scrape Content
+        console.log(`Fetching content for: "${story.title}"...`);
+        const content = await scrapeStoryContent(story.url);
         
-        const fullStory: Story = {
-          ...story,
-          date: new Date().toISOString().split('T')[0], // YYYY-MM-DD
-          reason: result.reason,
-          relevance_score: 1, // Binary relevance (1 = relevant)
-          notification_sent: false
-        };
+        if (!content) {
+          console.log(`Skipping "${story.title}" (Content fetch failed or skipped)`);
+          continue;
+        }
 
-        await saveStory(fullStory);
-      } else {
-        console.log(`IGNORE: ${story.title}`);
+        console.log(`Checking relevance for: "${story.title}"...`);
+        const result = await checkRelevance(story, content);
+
+        if (result) {
+          console.log(`MATCH: ${story.title} - ${result.reason}`);
+          
+          const fullStory: Story = {
+            ...story,
+            date: new Date().toISOString().split('T')[0], // YYYY-MM-DD
+            reason: result.reason,
+            relevance_score: 1, // Binary relevance (1 = relevant)
+            notification_sent: false
+          };
+
+          await saveStory(fullStory);
+          relevantStoriesFound++;
+        } else {
+          console.log(`IGNORE: ${story.title}`);
+        }
+      }
+
+      if (relevantStoriesFound > 0) {
+        console.log(`Found ${relevantStoriesFound} relevant stories. Stopping pagination.`);
+        break;
+      }
+
+      page++;
+      if (page <= MAX_PAGES) {
+        console.log('No relevant stories found yet. Moving to next page...');
+        await new Promise(resolve => setTimeout(resolve, 2000));
       }
     }
 
