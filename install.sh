@@ -10,7 +10,7 @@ set -e
 REPO_OWNER="ukrocks007"
 REPO_NAME="hackernews-insights"
 INSTALL_DIR="$HOME/hackernews-insights"
-BINARY_NAME="hackernews-insights"
+SERVICE_NAME="hackernews-insights"
 
 # Colors for output
 RED='\033[0;31m'
@@ -75,8 +75,13 @@ install_dependencies() {
         PACKAGES_NEEDED="$PACKAGES_NEEDED curl"
     fi
     
-    if ! command -v unzip &> /dev/null; then
-        PACKAGES_NEEDED="$PACKAGES_NEEDED unzip"
+    if ! command -v git &> /dev/null; then
+        PACKAGES_NEEDED="$PACKAGES_NEEDED git"
+    fi
+    
+    # Check for build essentials (needed for native modules)
+    if ! command -v gcc &> /dev/null; then
+        PACKAGES_NEEDED="$PACKAGES_NEEDED build-essential"
     fi
     
     if [[ -n "$PACKAGES_NEEDED" ]]; then
@@ -86,6 +91,28 @@ install_dependencies() {
     fi
     
     print_step "System dependencies OK"
+}
+
+# Install Node.js
+install_nodejs() {
+    print_info "Checking Node.js..."
+    
+    if ! command -v node &> /dev/null; then
+        print_info "Installing Node.js 20.x..."
+        curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+        sudo apt-get install -y nodejs
+        print_step "Node.js installed: $(node --version)"
+    else
+        NODE_VERSION=$(node --version | cut -d'v' -f2 | cut -d'.' -f1)
+        if [[ "$NODE_VERSION" -lt 18 ]]; then
+            print_warn "Node.js version is too old ($NODE_VERSION). Upgrading to 20.x..."
+            curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+            sudo apt-get install -y nodejs
+            print_step "Node.js upgraded: $(node --version)"
+        else
+            print_step "Node.js already installed: $(node --version)"
+        fi
+    fi
 }
 
 # Install Playwright browsers
@@ -112,39 +139,58 @@ install_playwright() {
     fi
 }
 
-# Download the binary
-download_binary() {
+# Clone and build the project
+clone_and_build() {
     print_info "Creating installation directory..."
-    mkdir -p "$INSTALL_DIR"
+    
+    # Remove old installation if exists
+    if [[ -d "$INSTALL_DIR" ]]; then
+        print_warn "Existing installation found at $INSTALL_DIR"
+        
+        # Backup config and db
+        if [[ -f "$INSTALL_DIR/config/interests.json" ]]; then
+            print_info "Backing up existing config..."
+            cp "$INSTALL_DIR/config/interests.json" /tmp/interests.json.backup
+        fi
+        
+        if [[ -d "$INSTALL_DIR/db" ]]; then
+            print_info "Backing up existing database..."
+            cp -r "$INSTALL_DIR/db" /tmp/db.backup
+        fi
+        
+        rm -rf "$INSTALL_DIR"
+    fi
+    
+    print_info "Cloning repository..."
+    git clone --depth 1 "https://github.com/$REPO_OWNER/$REPO_NAME.git" "$INSTALL_DIR"
+    
+    cd "$INSTALL_DIR"
+    
+    print_info "Installing dependencies (this may take a few minutes)..."
+    npm install --production
+    
+    print_info "Building project..."
+    npm run build
+    
+    # Restore backups if they exist
+    if [[ -f /tmp/interests.json.backup ]]; then
+        print_info "Restoring config backup..."
+        mkdir -p "$INSTALL_DIR/config"
+        cp /tmp/interests.json.backup "$INSTALL_DIR/config/interests.json"
+        rm /tmp/interests.json.backup
+    fi
+    
+    if [[ -d /tmp/db.backup ]]; then
+        print_info "Restoring database backup..."
+        cp -r /tmp/db.backup "$INSTALL_DIR/db"
+        rm -rf /tmp/db.backup
+    fi
+    
+    # Create necessary directories
     mkdir -p "$INSTALL_DIR/config"
     mkdir -p "$INSTALL_DIR/db"
     
-    print_info "Downloading latest binary..."
-    
-    # Try GitHub releases first
-    RELEASE_URL="https://github.com/$REPO_OWNER/$REPO_NAME/releases/latest/download/$BINARY_NAME-$BINARY_SUFFIX"
-    
-    HTTP_CODE=$(curl -sSL -o /dev/null -w "%{http_code}" "$RELEASE_URL" 2>/dev/null || echo "000")
-    
-    if [[ "$HTTP_CODE" == "200" || "$HTTP_CODE" == "302" ]]; then
-        curl -L --progress-bar "$RELEASE_URL" -o "$INSTALL_DIR/$BINARY_NAME"
-        print_step "Downloaded from GitHub Releases"
-    else
-        print_warn "No release found (HTTP $HTTP_CODE). Building is required."
-        print_info "Please create a release on GitHub first:"
-        echo ""
-        echo "  1. Clone the repo: git clone https://github.com/$REPO_OWNER/$REPO_NAME"
-        echo "  2. Build: npm install && npm run package:pi"
-        echo "  3. Create a release and upload bin/hackernews-insights as hackernews-insights-$BINARY_SUFFIX"
-        echo ""
-        echo "Or trigger the GitHub Action by creating a tag:"
-        echo "  git tag v1.0.0 && git push --tags"
-        echo ""
-        exit 1
-    fi
-    
-    chmod +x "$INSTALL_DIR/$BINARY_NAME"
-    print_step "Binary downloaded to $INSTALL_DIR/$BINARY_NAME"
+    print_step "Project built successfully"
 }
 
 # Configure interests
@@ -260,17 +306,17 @@ setup_cron() {
         3) CRON_SCHEDULE="0 9 * * *" ;;
         4) CRON_SCHEDULE="0 9,18 * * *" ;;
         5) 
-            print_info "Skipping cron setup. Run manually with: $INSTALL_DIR/$BINARY_NAME"
+            print_info "Skipping cron setup. Run manually with: cd $INSTALL_DIR && npm start"
             return
             ;;
         *) CRON_SCHEDULE="0 9 * * *" ;;
     esac
     
     # Remove existing cron job if any
-    crontab -l 2>/dev/null | grep -v "$INSTALL_DIR/$BINARY_NAME" | crontab - 2>/dev/null || true
+    crontab -l 2>/dev/null | grep -v "$INSTALL_DIR" | crontab - 2>/dev/null || true
     
     # Add new cron job
-    (crontab -l 2>/dev/null; echo "$CRON_SCHEDULE cd $INSTALL_DIR && ./$BINARY_NAME >> $INSTALL_DIR/cron.log 2>&1") | crontab -
+    (crontab -l 2>/dev/null; echo "$CRON_SCHEDULE cd $INSTALL_DIR && npm start >> $INSTALL_DIR/cron.log 2>&1") | crontab -
     
     print_step "Cron job configured: $CRON_SCHEDULE"
     print_info "Logs will be written to $INSTALL_DIR/cron.log"
@@ -283,11 +329,11 @@ test_installation() {
     
     cd "$INSTALL_DIR"
     
-    # Quick test - just check if binary runs
-    if timeout 10s ./$BINARY_NAME 2>&1 | head -5 | grep -q "Starting HN Insights Agent"; then
-        print_step "Binary starts correctly!"
+    # Quick test - just check if the app starts
+    if timeout 10s npm start 2>&1 | head -10 | grep -q "Starting"; then
+        print_step "Application starts correctly!"
     else
-        print_warn "Could not verify binary execution. Please test manually."
+        print_warn "Could not verify execution. Please test manually with: cd $INSTALL_DIR && npm start"
     fi
 }
 
@@ -303,17 +349,18 @@ print_summary() {
     echo "Installation directory: $INSTALL_DIR"
     echo ""
     echo "Files created:"
-    echo "  - $INSTALL_DIR/$BINARY_NAME (executable)"
+    echo "  - $INSTALL_DIR/dist/ (built application)"
     echo "  - $INSTALL_DIR/config/interests.json"
     echo "  - $INSTALL_DIR/.env"
     echo "  - $INSTALL_DIR/db/ (database folder)"
     echo ""
     echo "Commands:"
-    echo "  Run manually:     cd $INSTALL_DIR && ./$BINARY_NAME"
+    echo "  Run manually:     cd $INSTALL_DIR && npm start"
     echo "  View logs:        tail -f $INSTALL_DIR/cron.log"
     echo "  Edit interests:   nano $INSTALL_DIR/config/interests.json"
     echo "  Edit settings:    nano $INSTALL_DIR/.env"
     echo "  View cron jobs:   crontab -l"
+    echo "  Update:           cd $INSTALL_DIR && git pull && npm install && npm run build"
     echo ""
     echo "Make sure Ollama is running before executing the agent!"
     echo ""
@@ -325,7 +372,7 @@ uninstall() {
     print_warn "Uninstalling HackerNews Insights..."
     
     # Remove cron job
-    crontab -l 2>/dev/null | grep -v "$INSTALL_DIR/$BINARY_NAME" | crontab - 2>/dev/null || true
+    crontab -l 2>/dev/null | grep -v "$INSTALL_DIR" | crontab - 2>/dev/null || true
     
     # Remove installation directory
     if [[ -d "$INSTALL_DIR" ]]; then
@@ -350,9 +397,9 @@ main() {
         exit 0
     fi
     
-    check_architecture
     install_dependencies
-    download_binary
+    install_nodejs
+    clone_and_build
     install_playwright
     configure_interests
     configure_env

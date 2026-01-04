@@ -1,6 +1,6 @@
 # Hacker News Insights Agent
 
-An autonomous agent that scrapes Hacker News, filters stories based on your interests using a local LLM (FunctionGemma via Ollama), and sends a daily summary via Pushover. Designed to run on low-resource hardware like a Raspberry Pi.
+An autonomous agent that curate Hacker News stories based on your interests using a local LLM, and sends a daily summary via Pushover. Designed to run on low-resource hardware like a Raspberry Pi.
 
 ## 🚀 Quick Install (Raspberry Pi)
 
@@ -11,11 +11,14 @@ curl -sSL https://raw.githubusercontent.com/ukrocks007/hackernews-insights/main/
 ```
 
 The installer will:
-- Download the pre-built binary
+- Install Node.js 20 and build tools (if needed)
+- Clone the repository and build locally (solves native module compatibility issues)
 - Install Playwright browsers
 - Prompt for your interests
 - Configure Ollama and Pushover settings
 - Set up a cron job for automatic runs
+
+**Why build locally?** This ensures native modules like SQLite3 are compiled for your specific architecture, avoiding binding errors.
 
 ### Uninstall
 
@@ -96,8 +99,10 @@ To run this automatically every day at 8:00 AM:
 
 3.  Add the following line (adjust paths):
     ```cron
-    0 8 * * * cd /path/to/hackernews-insights && /usr/bin/node dist/index.js >> /path/to/hackernews-insights/cron.log 2>&1
+    0 8 * * * cd /path/to/hackernews-insights && npm start >> /path/to/hackernews-insights/cron.log 2>&1
     ```
+
+**Note:** The installer sets this up automatically for you.
 
 ## Project Structure
 

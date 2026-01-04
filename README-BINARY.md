@@ -1,5 +1,7 @@
 # Running as a Binary on Raspberry Pi
 
+> **⚠️ DEPRECATED:** Due to native module (SQLite3) binding issues with packaged binaries, we now recommend using the local build approach via the install script. See the main [README.md](README.md) for the recommended installation method.
+
 To save space and simplify deployment, you can package this application into a single executable binary.
 
 ## Prerequisites
@@ -64,5 +66,15 @@ If you try to run `npm run package` on macOS, the resulting binary might fail on
 
 ## Troubleshooting
 
--   **Sqlite3 Error**: If you see an error like `Error: Cannot find module .../node_sqlite3.node`, it means the native binding was not included or is for the wrong architecture. Try building on the Pi (Option 1).
+-   **Sqlite3 Error**: If you see an error like `Error: Cannot find module .../node_sqlite3.node`, it means the native binding was not included or is for the wrong architecture. **Recommended solution:** Use the local build approach with the install script from the main README instead of the binary approach.
 -   **Playwright Error**: If it complains about missing browsers, ensure you've run `npx playwright install`.
+
+## Recommended Alternative
+
+For a more reliable installation that avoids all native module issues, use the automated installer:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/ukrocks007/hackernews-insights/main/install.sh | bash
+```
+
+This clones the repository and builds locally, ensuring all native modules are compiled correctly for your system.
