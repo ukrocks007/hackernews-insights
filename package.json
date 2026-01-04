@@ -6,7 +6,8 @@
   "bin": "dist/index.js",
   "scripts": {
     "build": "tsc",
-    "package": "npm run build && pkg . --targets node18-linux-arm64 --out-path bin",
+    "package:pi": "npm run build && pkg . --targets node18-linux-arm64 --out-path bin",
+    "package:mac": "npm run build && pkg . --targets node18-macos-arm64 --out-path bin",
     "start": "node dist/index.js",
     "dev": "ts-node src/index.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
@@ -32,9 +33,6 @@
     "assets": [
       "node_modules/sqlite3/lib/binding/**/*",
       "config/**/*"
-    ],
-    "targets": [
-      "node18-linux-arm64"
     ],
     "outputPath": "bin"
   }
