@@ -32,11 +32,14 @@ jobs:
       - name: Install pkg
         run: npm install -g pkg
       
-      - name: Build ARM64 binary
-        run: pkg . --targets node18-linux-arm64 --output hackernews-insights-linux-arm64
-      
       - name: Build x64 binary
         run: pkg . --targets node18-linux-x64 --output hackernews-insights-linux-x64
+
+      - name: Install sqlite3 for ARM64
+        run: npm install sqlite3 --os=linux --cpu=arm64 --no-save
+
+      - name: Build ARM64 binary
+        run: pkg . --targets node18-linux-arm64 --output hackernews-insights-linux-arm64
       
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
