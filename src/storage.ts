@@ -17,7 +17,17 @@ export interface Story {
 let db: Database | null = null;
 
 export async function initDB(): Promise<void> {
-  const dbPath = path.resolve(__dirname, '../db/hn.sqlite');
+  // If running in pkg, use the directory of the executable. Otherwise use standard relative path.
+  const baseDir = (process as any).pkg ? path.dirname(process.execPath) : path.resolve(__dirname, '..');
+  const dbDir = path.join(baseDir, 'db');
+  
+  // Ensure db directory exists
+  const fs = require('fs');
+  if (!fs.existsSync(dbDir)) {
+    fs.mkdirSync(dbDir, { recursive: true });
+  }
+
+  const dbPath = path.join(dbDir, 'hn.sqlite');
   
   db = await open({
     filename: dbPath,

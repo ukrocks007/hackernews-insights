@@ -20,9 +20,23 @@ interface InterestConfig {
 
 function getInterests(): string[] {
   try {
+    // Check for external config first (next to executable)
+    if ((process as any).pkg) {
+      const externalConfigPath = path.join(path.dirname(process.execPath), 'config/interests.json');
+      if (fs.existsSync(externalConfigPath)) {
+        const fileContent = fs.readFileSync(externalConfigPath, 'utf-8');
+        return JSON.parse(fileContent);
+      }
+    }
+
+    // Fallback to development path or bundled path
     const configPath = path.resolve(__dirname, '../config/interests.json');
-    const fileContent = fs.readFileSync(configPath, 'utf-8');
-    return JSON.parse(fileContent);
+    if (fs.existsSync(configPath)) {
+      const fileContent = fs.readFileSync(configPath, 'utf-8');
+      return JSON.parse(fileContent);
+    }
+    
+    return [];
   } catch (error) {
     console.error('Error reading interests.json:', error);
     return [];
