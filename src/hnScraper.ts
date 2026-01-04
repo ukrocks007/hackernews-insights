@@ -1,0 +1,96 @@
+import { chromium, Browser, Page } from 'playwright';
+import dotenv from 'dotenv';
+
+dotenv.config();
+
+export interface ScrapedStory {
+  id: number;
+  title: string;
+  url: string;
+  score: number;
+  rank: number;
+}
+
+export async function scrapeTopStories(count: number = 30): Promise<ScrapedStory[]> {
+  console.log('Launching browser...');
+  const browser: Browser = await chromium.launch({
+    headless: process.env.HEADLESS !== 'false', // Default to true
+  });
+  
+  const context = await browser.newContext({
+    userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    viewport: { width: 1280, height: 720 }
+  });
+
+  const page: Page = await context.newPage();
+  const stories: ScrapedStory[] = [];
+
+  try {
+    console.log('Navigating to Hacker News...');
+    await page.goto('https://news.ycombinator.com/', { waitUntil: 'domcontentloaded' });
+
+    // Wait for the main table to load
+    await page.waitForSelector('#hnmain');
+
+    console.log('Extracting stories...');
+    
+    // HN structure: 
+    // <tr class="athing" id="38876543">...</tr>
+    // <tr><td colspan="2"></td><td class="subtext">...</td></tr>
+    
+    const storyRows = await page.$$('.athing');
+    
+    for (let i = 0; i < Math.min(count, storyRows.length); i++) {
+      const row = storyRows[i];
+      
+      // Extract ID
+      const idStr = await row.getAttribute('id');
+      const id = idStr ? parseInt(idStr, 10) : 0;
+      
+      // Extract Rank
+      const rankEl = await row.$('.rank');
+      const rankText = rankEl ? await rankEl.innerText() : '0.';
+      const rank = parseInt(rankText.replace('.', ''), 10);
+      
+      // Extract Title and URL
+      const titleEl = await row.$('.titleline > a');
+      if (!titleEl) continue;
+      
+      const title = await titleEl.innerText();
+      let url = await titleEl.getAttribute('href') || '';
+      
+      // Handle relative URLs (Ask HN, etc.)
+      if (url.startsWith('item?id=')) {
+        url = `https://news.ycombinator.com/${url}`;
+      }
+
+      // Extract Score (need to look at the next row)
+      // We can find the subtext row by looking for the next sibling tr of the current row
+      // Or simpler: select based on the score span which has an id `score_<id>`
+      const scoreEl = await page.$(`#score_${id}`);
+      let score = 0;
+      if (scoreEl) {
+        const scoreText = await scoreEl.innerText();
+        score = parseInt(scoreText.split(' ')[0], 10);
+      }
+
+      stories.push({
+        id,
+        title,
+        url,
+        score,
+        rank
+      });
+    }
+    
+    console.log(`Extracted ${stories.length} stories.`);
+    
+  } catch (error) {
+    console.error('Error scraping HN:', error);
+    throw error;
+  } finally {
+    await browser.close();
+  }
+
+  return stories;
+}
