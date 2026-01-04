@@ -55,7 +55,7 @@ check_architecture() {
     else
         print_warn "Unsupported architecture: $ARCH"
         print_warn "This script supports linux-arm64 and linux-x64."
-        read -p "Continue anyway (will try linux-x64)? (y/N): " confirm
+        read -p "Continue anyway (will try linux-x64)? (y/N): " confirm < /dev/tty
         if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
             exit 1
         fi
@@ -156,7 +156,7 @@ configure_interests() {
         print_info "Existing interests found:"
         cat "$INSTALL_DIR/config/interests.json"
         echo ""
-        read -p "Keep existing interests? (Y/n): " keep
+        read -p "Keep existing interests? (Y/n): " keep < /dev/tty
         if [[ "$keep" == "y" || "$keep" == "Y" || -z "$keep" ]]; then
             print_step "Keeping existing interests"
             return
@@ -166,7 +166,7 @@ configure_interests() {
     echo "Enter your interests (comma-separated)."
     echo "Examples: AI, LLMs, Open source, Rust, Startups, Productivity"
     echo ""
-    read -p "Your interests: " interests_input
+    read -p "Your interests: " interests_input < /dev/tty
     
     # Convert to JSON array
     IFS=',' read -ra INTERESTS <<< "$interests_input"
@@ -197,7 +197,7 @@ configure_env() {
     
     if [[ -f "$INSTALL_DIR/.env" ]]; then
         print_info "Existing .env found."
-        read -p "Reconfigure? (y/N): " reconf
+        read -p "Reconfigure? (y/N): " reconf < /dev/tty
         if [[ "$reconf" != "y" && "$reconf" != "Y" ]]; then
             print_step "Keeping existing .env"
             return
@@ -206,17 +206,17 @@ configure_env() {
     
     echo ""
     echo "=== Ollama Configuration ==="
-    read -p "Ollama URL [http://localhost:11434]: " ollama_url
+    read -p "Ollama URL [http://localhost:11434]: " ollama_url < /dev/tty
     ollama_url=${ollama_url:-http://localhost:11434}
     
-    read -p "Ollama Model [qwen2.5:0.5b]: " ollama_model
+    read -p "Ollama Model [qwen2.5:0.5b]: " ollama_model < /dev/tty
     ollama_model=${ollama_model:-qwen2.5:0.5b}
     
     echo ""
     echo "=== Pushover Notifications (optional) ==="
     echo "Get your keys from https://pushover.net"
-    read -p "Pushover User Key (leave empty to skip): " pushover_user
-    read -p "Pushover API Token (leave empty to skip): " pushover_token
+    read -p "Pushover User Key (leave empty to skip): " pushover_user < /dev/tty
+    read -p "Pushover API Token (leave empty to skip): " pushover_token < /dev/tty
     
     cat > "$INSTALL_DIR/.env" << EOF
 # Ollama Configuration
@@ -246,7 +246,7 @@ setup_cron() {
     echo "4) Twice daily (9 AM and 6 PM)"
     echo "5) Skip cron setup"
     echo ""
-    read -p "Choose [1-5]: " cron_choice
+    read -p "Choose [1-5]: " cron_choice < /dev/tty
     
     case $cron_choice in
         1) CRON_SCHEDULE="0 * * * *" ;;
@@ -323,7 +323,7 @@ uninstall() {
     
     # Remove installation directory
     if [[ -d "$INSTALL_DIR" ]]; then
-        read -p "Remove $INSTALL_DIR and all data? (y/N): " confirm
+        read -p "Remove $INSTALL_DIR and all data? (y/N): " confirm < /dev/tty
         if [[ "$confirm" == "y" || "$confirm" == "Y" ]]; then
             rm -rf "$INSTALL_DIR"
             print_step "Removed $INSTALL_DIR"
