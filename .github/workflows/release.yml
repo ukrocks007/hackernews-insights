@@ -26,33 +26,27 @@ jobs:
       - name: Install dependencies
         run: npm ci
       
-      - name: Build TypeScript
-        run: npm run build
-      
-      - name: Install pkg
-        run: npm install -g pkg
-      
       - name: Build ARM64 binary
-        run: pkg . --targets node18-linux-arm64 --output hackernews-insights-linux-arm64
+        run: npm run package:pi
       
       - name: Build x64 binary
-        run: pkg . --targets node18-linux-x64 --output hackernews-insights-linux-x64
+        run: npm run package:x64
       
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: binaries
           path: |
-            hackernews-insights-linux-arm64
-            hackernews-insights-linux-x64
+            bin/hackernews-insights-linux-arm64
+            bin/hackernews-insights-linux-x64
       
       - name: Create Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            hackernews-insights-linux-arm64
-            hackernews-insights-linux-x64
+            bin/hackernews-insights-linux-arm64
+            bin/hackernews-insights-linux-x64
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
