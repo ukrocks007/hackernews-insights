@@ -5,7 +5,7 @@
   "main": "index.js",
   "bin": "dist/index.js",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && cp .env dist/.env",
     "package:pi": "npm run build && pkg . --targets node18-linux-arm64 --out-path bin",
     "package:mac": "npm run build && pkg . --targets node18-macos-arm64 --out-path bin",
     "start": "node dist/index.js",
