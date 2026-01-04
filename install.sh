@@ -251,7 +251,8 @@ setup_cron() {
     echo "4) Twice daily (9 AM and 6 PM)"
     echo "5) Skip cron setup"
     echo ""
-    read -p "Choose [1-5]: " cron_choice < /dev/tty
+    echo -n "Choose [1-5]: "
+    read cron_choice < /dev/tty
     
     case $cron_choice in
         1) CRON_SCHEDULE="0 * * * *" ;;
@@ -321,14 +322,15 @@ print_summary() {
 # Uninstall function
 uninstall() {
     echo ""
-    prinecho -n "Remove $INSTALL_DIR and all data? (y/N): "
-        t_warn "Uninstalling HackerNews Insights..."
+    print_warn "Uninstalling HackerNews Insights..."
+    
     # Remove cron job
     crontab -l 2>/dev/null | grep -v "$INSTALL_DIR/$BINARY_NAME" | crontab - 2>/dev/null || true
     
     # Remove installation directory
     if [[ -d "$INSTALL_DIR" ]]; then
-        read -p "Remove $INSTALL_DIR and all data? (y/N): " confirm < /dev/tty
+        echo -n "Remove $INSTALL_DIR and all data? (y/N): "
+        read confirm < /dev/tty
         if [[ "$confirm" == "y" || "$confirm" == "Y" ]]; then
             rm -rf "$INSTALL_DIR"
             print_step "Removed $INSTALL_DIR"
