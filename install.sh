@@ -127,7 +127,7 @@ download_binary() {
     HTTP_CODE=$(curl -sSL -o /dev/null -w "%{http_code}" "$RELEASE_URL" 2>/dev/null || echo "000")
     
     if [[ "$HTTP_CODE" == "200" || "$HTTP_CODE" == "302" ]]; then
-        curl -sSL -L "$RELEASE_URL" -o "$INSTALL_DIR/$BINARY_NAME"
+        curl -L --progress-bar "$RELEASE_URL" -o "$INSTALL_DIR/$BINARY_NAME"
         print_step "Downloaded from GitHub Releases"
     else
         print_warn "No release found (HTTP $HTTP_CODE). Building is required."
