@@ -32,14 +32,20 @@ jobs:
       - name: Install pkg
         run: npm install -g pkg
       
-      - name: Build x64 binary
-        run: pkg . --targets node18-linux-x64 --output hackernews-insights-linux-x64
-
-      - name: Install sqlite3 for ARM64
-        run: npm install sqlite3 --os=linux --cpu=arm64 --no-save
+      - name: Prepare SQLite3 ARM64 binding
+        run: |
+          mkdir -p node_modules/sqlite3/lib/binding/node-v108-linux-arm64
+          curl -L -o sqlite3-arm64.tar.gz https://github.com/TryGhost/node-sqlite3/releases/download/v5.1.7/napi-v6-linux-glibc-arm64.tar.gz
+          tar -xzf sqlite3-arm64.tar.gz
+          find . -name node_sqlite3.node
+          mv napi-v6-linux-glibc-arm64/node_sqlite3.node node_modules/sqlite3/lib/binding/node-v108-linux-arm64/node_sqlite3.node
+          rm sqlite3-arm64.tar.gz
+          rm -rf napi-v6-linux-glibc-arm64
 
       - name: Build ARM64 binary
         run: pkg . --targets node18-linux-arm64 --output hackernews-insights-linux-arm64
+      
+      - name: Build x64 binary
       
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
