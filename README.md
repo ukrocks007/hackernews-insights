@@ -2,6 +2,29 @@
 
 An autonomous agent that scrapes Hacker News, filters stories based on your interests using a local LLM (FunctionGemma via Ollama), and sends a daily summary via Pushover. Designed to run on low-resource hardware like a Raspberry Pi.
 
+## 🚀 Quick Install (Raspberry Pi)
+
+Run this single command on your Raspberry Pi:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/ukrocks007/hackernews-insights/main/install.sh | bash
+```
+
+The installer will:
+- Download the pre-built binary
+- Install Playwright browsers
+- Prompt for your interests
+- Configure Ollama and Pushover settings
+- Set up a cron job for automatic runs
+
+### Uninstall
+
+```bash
+curl -sSL https://raw.githubusercontent.com/ukrocks007/hackernews-insights/main/install.sh | bash -s -- --uninstall
+```
+
+---
+
 ## Features
 
 - **Headless Browsing**: Uses Playwright to scrape HN safely.
