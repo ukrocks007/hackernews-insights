@@ -1,4 +1,3 @@
-import axios from 'axios';
 import fs from 'fs';
 import path from 'path';
 import dotenv from 'dotenv';
@@ -99,8 +98,18 @@ Content signals:
   };
 
   try {
-    const response = await axios.post(`${OLLAMA_BASE_URL}/api/chat`, payload);
-    const message = response.data.message;
+    const response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Ollama API error: ${response.status} ${response.statusText}`);
+    }
+    
+    const data = await response.json();
+    const message = data.message;
 
     if (message.tool_calls && message.tool_calls.length > 0) {
       const toolCall = message.tool_calls[0];
@@ -112,8 +121,8 @@ Content signals:
       }
     }
 
-    const content = message.content.trim();
-    if (content === 'IGNORE') {
+    const msgContent = message.content.trim();
+    if (msgContent === 'IGNORE') {
       return null;
     }
     

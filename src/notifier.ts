@@ -1,4 +1,3 @@
-import axios from 'axios';
 import dotenv from 'dotenv';
 import { Story } from './storage';
 
@@ -16,13 +15,22 @@ export async function sendNotification(message: string, title: string = 'HN Insi
   }
 
   try {
-    await axios.post(PUSHOVER_URL, {
-      token: PUSHOVER_API_TOKEN,
-      user: PUSHOVER_USER_KEY,
-      message: message,
-      title: title,
-      html: 1
+    const response = await fetch(PUSHOVER_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        token: PUSHOVER_API_TOKEN,
+        user: PUSHOVER_USER_KEY,
+        message: message,
+        title: title,
+        html: 1
+      })
     });
+    
+    if (!response.ok) {
+      throw new Error(`Pushover API error: ${response.status}`);
+    }
+    
     console.log('Notification sent successfully.');
   } catch (error) {
     console.error('Error sending notification:', error);
