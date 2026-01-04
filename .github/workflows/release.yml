@@ -35,10 +35,12 @@ jobs:
       - name: Prepare SQLite3 ARM64 binding
         run: |
           mkdir -p node_modules/sqlite3/lib/binding/node-v108-linux-arm64
+          mkdir -p node_modules/sqlite3/lib/binding/napi-v6-linux-arm64
           curl -L -o sqlite3-arm64.tar.gz https://github.com/TryGhost/node-sqlite3/releases/download/v5.1.7/sqlite3-v5.1.7-napi-v6-linux-arm64.tar.gz
           tar -xzf sqlite3-arm64.tar.gz
           find . -name node_sqlite3.node
-          mv napi-v6-linux-arm64/node_sqlite3.node node_modules/sqlite3/lib/binding/node-v108-linux-arm64/node_sqlite3.node
+          cp napi-v6-linux-arm64/node_sqlite3.node node_modules/sqlite3/lib/binding/node-v108-linux-arm64/node_sqlite3.node
+          cp napi-v6-linux-arm64/node_sqlite3.node node_modules/sqlite3/lib/binding/napi-v6-linux-arm64/node_sqlite3.node
           rm sqlite3-arm64.tar.gz
           rm -rf napi-v6-linux-arm64
 
