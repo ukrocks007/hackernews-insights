@@ -167,9 +167,9 @@ configure_interests() {
     
     echo "Enter your interests (comma-separated)."
     echo "Examples: AI, LLMs, Open source, Rust, Startups, Productivity"
+    echo ""
     echo -n "Your interests: "
-    read
-    read -p "Your interests: " interests_input < /dev/tty
+    read interests_input < /dev/tty
     
     # Convert to JSON array
     IFS=',' read -ra INTERESTS <<< "$interests_input"
@@ -198,10 +198,10 @@ configure_env() {
     echo ""
     print_info "Configuring environment variables..."
     
-    if [echo -n "Reconfigure? (y/N): "
-        readhen
+    if [[ -f "$INSTALL_DIR/.env" ]]; then
         print_info "Existing .env found."
-        read -p "Reconfigure? (y/N): " reconf < /dev/tty
+        echo -n "Reconfigure? (y/N): "
+        read reconf < /dev/tty
         if [[ "$reconf" != "y" && "$reconf" != "Y" ]]; then
             print_step "Keeping existing .env"
             return
@@ -221,10 +221,7 @@ configure_env() {
     echo -n "Pushover User Key (leave empty to skip): "
     read pushover_user < /dev/tty
     echo -n "Pushover API Token (leave empty to skip): "
-    read
-    echo "Get your keys from https://pushover.net"
-    read -p "Pushover User Key (leave empty to skip): " pushover_user < /dev/tty
-    read -p "Pushover API Token (leave empty to skip): " pushover_token < /dev/tty
+    read pushover_token < /dev/tty
     
     cat > "$INSTALL_DIR/.env" << EOF
 # Ollama Configuration
@@ -248,8 +245,7 @@ setup_cron() {
     print_info "Setting up scheduled runs..."
     
     echo "How often should the agent run?"
-    echo -n "Choose [1-5]: "
-    read
+    echo "1) Every hour"
     echo "2) Every 6 hours"
     echo "3) Once daily (9 AM)"
     echo "4) Twice daily (9 AM and 6 PM)"
@@ -326,8 +322,7 @@ print_summary() {
 uninstall() {
     echo ""
     prinecho -n "Remove $INSTALL_DIR and all data? (y/N): "
-        read
-    
+        t_warn "Uninstalling HackerNews Insights..."
     # Remove cron job
     crontab -l 2>/dev/null | grep -v "$INSTALL_DIR/$BINARY_NAME" | crontab - 2>/dev/null || true
     
