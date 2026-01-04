@@ -5,7 +5,7 @@
   "main": "index.js",
   "bin": "dist/index.js",
   "scripts": {
-    "build": "tsc && cp .env dist/.env",
+    "build": "tsc && test -f .env && cp .env dist/.env || echo 'No .env file, skipping copy'",
     "package:pi": "npm run build && pkg . --targets node18-linux-arm64 --output bin/hackernews-insights-linux-arm64",
     "package:x64": "npm run build && pkg . --targets node18-linux-x64 --output bin/hackernews-insights-linux-x64",
     "package:mac": "npm run build && pkg . --targets node18-macos-arm64 --output bin/hackernews-insights-macos-arm64",
