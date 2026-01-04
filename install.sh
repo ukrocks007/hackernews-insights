@@ -43,16 +43,23 @@ print_error() {
     echo -e "${RED}[✗]${NC} $1"
 }
 
-# Check if running on ARM (Raspberry Pi)
+# Check architecture and determine binary name
 check_architecture() {
     ARCH=$(uname -m)
-    if [[ "$ARCH" != "aarch64" && "$ARCH" != "arm64" ]]; then
-        print_warn "This script is designed for Raspberry Pi (ARM64)."
-        print_warn "Detected architecture: $ARCH"
-        read -p "Continue anyway? (y/N): " confirm
+    if [[ "$ARCH" == "aarch64" || "$ARCH" == "arm64" ]]; then
+        BINARY_SUFFIX="linux-arm64"
+        print_info "Detected ARM64 architecture."
+    elif [[ "$ARCH" == "x86_64" || "$ARCH" == "amd64" ]]; then
+        BINARY_SUFFIX="linux-x64"
+        print_info "Detected x64 architecture."
+    else
+        print_warn "Unsupported architecture: $ARCH"
+        print_warn "This script supports linux-arm64 and linux-x64."
+        read -p "Continue anyway (will try linux-x64)? (y/N): " confirm
         if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
             exit 1
         fi
+        BINARY_SUFFIX="linux-x64"
     fi
 }
 
@@ -114,7 +121,7 @@ download_binary() {
     print_info "Downloading latest binary..."
     
     # Try GitHub releases first
-    RELEASE_URL="https://github.com/$REPO_OWNER/$REPO_NAME/releases/latest/download/$BINARY_NAME-linux-arm64"
+    RELEASE_URL="https://github.com/$REPO_OWNER/$REPO_NAME/releases/latest/download/$BINARY_NAME-$BINARY_SUFFIX"
     
     HTTP_CODE=$(curl -sSL -o /dev/null -w "%{http_code}" "$RELEASE_URL" 2>/dev/null || echo "000")
     
@@ -127,7 +134,7 @@ download_binary() {
         echo ""
         echo "  1. Clone the repo: git clone https://github.com/$REPO_OWNER/$REPO_NAME"
         echo "  2. Build: npm install && npm run package:pi"
-        echo "  3. Create a release and upload bin/hackernews-insights as hackernews-insights-linux-arm64"
+        echo "  3. Create a release and upload bin/hackernews-insights as hackernews-insights-$BINARY_SUFFIX"
         echo ""
         echo "Or trigger the GitHub Action by creating a tag:"
         echo "  git tag v1.0.0 && git push --tags"
