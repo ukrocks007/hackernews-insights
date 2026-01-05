@@ -36,7 +36,8 @@
     "scripts": "dist/**/*.js",
     "assets": [
       "prisma/schema.prisma",
-      "node_modules/.prisma/client/**/*",
+      "node_modules/.prisma/client/libquery_engine*",
+      "node_modules/.prisma/client/schema.prisma",
       "config/**/*"
     ],
     "targets": [

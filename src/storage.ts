@@ -76,7 +76,11 @@ async function refreshRelevance(story: Story & { feedbackEvents: FeedbackEvent[]
       },
     });
 
-    return { ...updated, feedbackEvents: story.feedbackEvents };
+    const updatedStory: Story & { feedbackEvents: FeedbackEvent[] } = {
+      ...updated,
+      feedbackEvents: story.feedbackEvents,
+    };
+    return updatedStory;
   }
 
   return story;

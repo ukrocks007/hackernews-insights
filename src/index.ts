@@ -128,9 +128,7 @@ async function main() {
     await sendErrorNotification(error);
     process.exit(1);
   } finally {
-    if (!feedbackServerStarted) {
-      await closeDB();
-    }
+    await closeDB();
     console.log('Done.');
   }
 }

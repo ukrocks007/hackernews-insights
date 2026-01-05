@@ -103,7 +103,7 @@ export async function startFeedbackServer(options: FeedbackServerOptions = {}): 
   });
 
   if (serverTtlHours > 0) {
-    setTimeout(async () => {
+    setTimeout(() => {
       console.log(`Shutting down feedback server after ${serverTtlHours}h window.`);
       server.close(() => {
         disconnectPrisma().catch(error => {

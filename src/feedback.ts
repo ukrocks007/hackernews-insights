@@ -119,6 +119,13 @@ function decayFactor(createdAt: Date): number {
   return Math.exp(-lambda * hoursAgo);
 }
 
+function calculateSuppressionHours(score: number): number {
+  return Math.min(
+    MAX_SUPPRESSION_HOURS,
+    Math.max(MIN_SUPPRESSION_HOURS, Math.round(Math.abs(score) / SCORE_SCALE) * SUPPRESSION_HOURS_PER_POINT)
+  );
+}
+
 export function toDisplayScore(relevanceScore: number): string {
   return (relevanceScore / SCORE_SCALE).toFixed(2);
 }
@@ -129,6 +136,16 @@ export function computeRelevanceScore(story: Story, feedbackEvents: FeedbackEven
   const reasons: string[] = [];
   const tagTotals = new Map<string, number>();
   const sourceTotals = new Map<string, number>();
+  const storyHost = story.url
+    ? (() => {
+        try {
+          return new URL(story.url).hostname.replace(/^www\./, '');
+        } catch (error) {
+          console.warn(`Invalid story URL for tag aggregation (story ${story.id}):`, error);
+          return null;
+        }
+      })()
+    : null;
 
   for (const event of feedbackEvents) {
     const action = event.action as FeedbackAction;
@@ -145,13 +162,8 @@ export function computeRelevanceScore(story: Story, feedbackEvents: FeedbackEven
     aggregate += contribution;
     reasons.push(`${action} (${event.confidence}) x${decay.toFixed(2)} => ${contribution.toFixed(0)}`);
 
-    if (story.url) {
-      try {
-        const host = new URL(story.url).hostname.replace(/^www\./, '');
-        tagTotals.set(host, (tagTotals.get(host) || 0) + contribution);
-      } catch (error) {
-        console.warn(`Invalid story URL for tag aggregation (story ${story.id}):`, error);
-      }
+    if (storyHost) {
+      tagTotals.set(storyHost, (tagTotals.get(storyHost) || 0) + contribution);
     }
     sourceTotals.set(event.source, (sourceTotals.get(event.source) || 0) + contribution);
   }
@@ -171,10 +183,7 @@ export function computeRelevanceScore(story: Story, feedbackEvents: FeedbackEven
   const roundedScore = Math.round(aggregate);
   if (roundedScore < SUPPRESSION_THRESHOLD) {
     // Suppress temporarily but allow rebound after decay
-    const hours = Math.min(
-      MAX_SUPPRESSION_HOURS,
-      Math.max(MIN_SUPPRESSION_HOURS, Math.round(Math.abs(roundedScore) / SCORE_SCALE) * SUPPRESSION_HOURS_PER_POINT)
-    );
+    const hours = calculateSuppressionHours(roundedScore);
     suppressedUntil = new Date(Date.now() + hours * 60 * 60 * 1000);
     reasons.push(`Suppressed for ${hours}h due to low relevance (${toDisplayScore(roundedScore)})`);
   } else if (roundedScore > 0 && suppressedUntil && suppressedUntil > new Date()) {
