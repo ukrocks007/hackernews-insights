@@ -95,7 +95,6 @@ export async function getUnsentRelevantStories(): Promise<Story[]> {
       OR: [{ suppressedUntil: null }, { suppressedUntil: { lte: new Date() } }],
     },
     include: { feedbackEvents: true },
-    orderBy: [{ relevanceScore: 'desc' }, { score: 'desc' }],
   });
 
   const refreshedStories = await Promise.all(stories.map(refreshRelevance));

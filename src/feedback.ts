@@ -28,6 +28,8 @@ const SUPPRESSION_THRESHOLD = -150; // scaled score
 const MIN_SUPPRESSION_HOURS = 6;
 const MAX_SUPPRESSION_HOURS = 48;
 const SUPPRESSION_HOURS_PER_POINT = 2;
+const TAG_ADJUSTMENT_FACTOR = 0.1;
+const SOURCE_ADJUSTMENT_FACTOR = 0.05;
 
 export const FEEDBACK_ACTIONS: FeedbackAction[] = ['LIKE', 'DISLIKE', 'SAVE', 'OPENED', 'IGNORED'];
 
@@ -131,7 +133,7 @@ export function toDisplayScore(relevanceScore: number): string {
 }
 
 export function computeRelevanceScore(story: Story, feedbackEvents: FeedbackEvent[]): RelevanceComputation {
-  let aggregate = Math.max(story.relevanceScore || 0, SCORE_SCALE); // baseline equivalent to 1.0 when scaled
+  let aggregate = story.relevanceScore ?? SCORE_SCALE; // baseline equivalent to 1.0 when scaled
   let suppressedUntil: Date | null = story.suppressedUntil ?? null;
   const reasons: string[] = [];
   const tagTotals = new Map<string, number>();
@@ -168,13 +170,13 @@ export function computeRelevanceScore(story: Story, feedbackEvents: FeedbackEven
     sourceTotals.set(event.source, (sourceTotals.get(event.source) || 0) + contribution);
   }
 
-  const tagAdjustment = Array.from(tagTotals.values()).reduce((sum, value) => sum + value * 0.1, 0);
+  const tagAdjustment = Array.from(tagTotals.values()).reduce((sum, value) => sum + value * TAG_ADJUSTMENT_FACTOR, 0);
   if (tagAdjustment !== 0) {
     aggregate += tagAdjustment;
     reasons.push(`Domain bias applied: ${tagAdjustment.toFixed(0)}`);
   }
 
-  const sourceAdjustment = Array.from(sourceTotals.values()).reduce((sum, value) => sum + value * 0.05, 0);
+  const sourceAdjustment = Array.from(sourceTotals.values()).reduce((sum, value) => sum + value * SOURCE_ADJUSTMENT_FACTOR, 0);
   if (sourceAdjustment !== 0) {
     aggregate += sourceAdjustment;
     reasons.push(`Source bias applied: ${sourceAdjustment.toFixed(0)}`);

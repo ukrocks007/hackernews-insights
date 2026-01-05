@@ -40,7 +40,10 @@ export async function startFeedbackServer(options: FeedbackServerOptions = {}): 
   const port = options.port ?? Number(process.env.FEEDBACK_PORT || 3000);
   const host = options.host ?? (process.env.FEEDBACK_HOST || '0.0.0.0');
   const ttlHours = options.ttlHours ?? Number(process.env.FEEDBACK_TTL_HOURS || 36);
-  const serverTtlHours = Number(process.env.FEEDBACK_SERVER_TTL_HOURS || ttlHours);
+  const serverTtlHours =
+    process.env.FEEDBACK_SERVER_TTL_HOURS !== undefined
+      ? Number(process.env.FEEDBACK_SERVER_TTL_HOURS)
+      : ttlHours;
 
   const server = http.createServer(async (req, res) => {
     try {
@@ -94,7 +97,9 @@ export async function startFeedbackServer(options: FeedbackServerOptions = {}): 
         .end(renderResponse(`Saved your feedback (${action}). Current score: ${scoreText}. ${suppressionText}`));
     } catch (error) {
       console.error('Feedback endpoint error', error);
-      res.writeHead(200, { 'Content-Type': 'text/html' }).end(renderResponse('Thanks!'));
+      res
+        .writeHead(200, { 'Content-Type': 'text/html' })
+        .end(renderResponse('We could not process your feedback right now. Please try again later.'));
     }
   });
 
