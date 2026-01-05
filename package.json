@@ -13,9 +13,9 @@
     "start": "node dist/index.js",
     "dev": "ts-node src/index.ts",
     "test": "echo \"Error: no test specified\" && exit 1",
-    "prisma:generate": "prisma generate",
+    "prisma:generate": "prisma generate --schema prisma/schema.prisma",
     "prisma:deploy": "prisma migrate deploy || prisma db push",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate --schema prisma/schema.prisma"
   },
   "keywords": [],
   "author": "",

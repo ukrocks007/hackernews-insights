@@ -12,10 +12,11 @@ export interface StoryInput {
   rank?: number | null;
   date: string;
   reason?: string | null;
-  relevanceScore?: number;
+  relevanceScore?: number; // defaults to SCORE_SCALE when omitted
   notificationSent?: boolean;
 }
 
+// New stories start at SCORE_SCALE (represents a baseline relevance of 1.0)
 const DEFAULT_RELEVANCE_SCORE = SCORE_SCALE;
 
 export async function initDB(): Promise<void> {
@@ -48,7 +49,7 @@ export async function saveStory(story: StoryInput): Promise<void> {
 }
 
 function withoutRelations(story: Story & { feedbackEvents?: FeedbackEvent[] }): Story {
-  const { feedbackEvents: _events, ...rest } = story;
+  const { feedbackEvents: _feedbackEvents, ...rest } = story;
   return rest;
 }
 

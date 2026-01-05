@@ -131,7 +131,7 @@ export function toDisplayScore(relevanceScore: number): string {
 }
 
 export function computeRelevanceScore(story: Story, feedbackEvents: FeedbackEvent[]): RelevanceComputation {
-  let aggregate = Math.max(story.relevanceScore || 0, SCORE_SCALE); // baseline of 1.0
+  let aggregate = Math.max(story.relevanceScore || 0, SCORE_SCALE); // baseline equivalent to 1.0 when scaled
   let suppressedUntil: Date | null = story.suppressedUntil ?? null;
   const reasons: string[] = [];
   const tagTotals = new Map<string, number>();
@@ -141,7 +141,7 @@ export function computeRelevanceScore(story: Story, feedbackEvents: FeedbackEven
         try {
           return new URL(story.url).hostname.replace(/^www\./, '');
         } catch (error) {
-          console.warn(`Invalid story URL for tag aggregation (story ${story.id}):`, error);
+          console.warn(`Invalid story URL '${story.url}' for tag aggregation (story ${story.id}):`, error);
           return null;
         }
       })()
