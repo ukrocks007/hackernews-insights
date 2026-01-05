@@ -143,7 +143,7 @@ export function computeRelevanceScore(story: Story, feedbackEvents: FeedbackEven
         try {
           return new URL(story.url).hostname.replace(/^www\./, '');
         } catch (error) {
-          console.warn(`Invalid story URL '${story.url}' for tag aggregation (story ${story.id}):`, error);
+          console.warn(`Invalid story URL '${story.url}' for domain extraction (story ${story.id}):`, error);
           return null;
         }
       })()

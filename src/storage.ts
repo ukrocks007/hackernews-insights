@@ -97,7 +97,10 @@ export async function getUnsentRelevantStories(): Promise<Story[]> {
     include: { feedbackEvents: true },
   });
 
-  const refreshedStories = await Promise.all(stories.map(refreshRelevance));
+  const refreshedStories: Array<Story & { feedbackEvents: FeedbackEvent[] }> = [];
+  for (const story of stories) {
+    refreshedStories.push(await refreshRelevance(story));
+  }
   const normalized = refreshedStories.map(withoutRelations);
   normalized.sort((a, b) => {
     if (b.relevanceScore !== a.relevanceScore) {

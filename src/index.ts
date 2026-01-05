@@ -8,6 +8,7 @@ import { toDisplayScore } from './feedback';
 
 async function main() {
   let feedbackServerStarted = false;
+  const INITIAL_RELEVANCE_BOOST = 150;
   try {
     console.log('Starting HN Insights Agent...');
     
@@ -75,7 +76,7 @@ async function main() {
             ...story,
             date: new Date().toISOString().split('T')[0], // YYYY-MM-DD
             reason: result.reason,
-            relevanceScore: 150, // boost initial relevance for freshly matched stories (scaled)
+            relevanceScore: INITIAL_RELEVANCE_BOOST, // boost initial relevance for freshly matched stories (scaled)
             notificationSent: false,
           };
 

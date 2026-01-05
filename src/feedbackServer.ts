@@ -110,10 +110,9 @@ export async function startFeedbackServer(options: FeedbackServerOptions = {}): 
   if (serverTtlHours > 0) {
     const shutdownTimer = setTimeout(() => {
       console.log(`Shutting down feedback server after ${serverTtlHours}h window.`);
-      server.close(() => {
-        disconnectPrisma().catch(error => {
-          console.error('Failed to disconnect Prisma during feedback server shutdown', error);
-        });
+      server.close();
+      disconnectPrisma().catch(error => {
+        console.error('Failed to disconnect Prisma during feedback server shutdown', error);
       });
     }, serverTtlHours * 60 * 60 * 1000);
     shutdownTimer.unref();
