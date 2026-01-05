@@ -1,15 +1,24 @@
-import { initDB, closeDB, saveStory, hasStoryBeenProcessed, getUnsentRelevantStories, markStoryAsSent, Story } from './storage';
+import { initDB, closeDB, saveStory, hasStoryBeenProcessed, getUnsentRelevantStories, markStoryAsSent, StoryInput } from './storage';
 import { scrapeTopStories } from './hnScraper';
 import { checkRelevance, MIN_HN_SCORE, MAX_RANK } from './relevanceAgent';
 import { sendStoryNotification, sendErrorNotification, sendNotification } from './notifier';
 import { scrapeStoryContent } from './contentScraper';
+import { startFeedbackServer } from './feedbackServer';
+import { toDisplayScore } from './feedback';
 
 async function main() {
+  let feedbackServerStarted = false;
   try {
     console.log('Starting HN Insights Agent...');
     
     // 1. Initialize Database
     await initDB();
+    try {
+      await startFeedbackServer();
+      feedbackServerStarted = true;
+    } catch (error) {
+      console.warn('Feedback server failed to start, continuing without feedback endpoint.', error);
+    }
 
     let relevantStoriesFound = 0;
     let page = 1;
@@ -62,12 +71,12 @@ async function main() {
         if (result) {
           console.log(`MATCH: ${story.title} - ${result.reason}`);
           
-          const fullStory: Story = {
+          const fullStory: StoryInput = {
             ...story,
             date: new Date().toISOString().split('T')[0], // YYYY-MM-DD
             reason: result.reason,
-            relevance_score: 1, // Binary relevance (1 = relevant)
-            notification_sent: false
+            relevanceScore: 150, // boost initial relevance for freshly matched stories (scaled)
+            notificationSent: false,
           };
 
           await saveStory(fullStory);
@@ -104,6 +113,9 @@ async function main() {
       console.log(`Sending notifications for top ${topStories.length} stories...`);
       
       for (const story of topStories) {
+        console.log(
+          `Selected "${story.title}" (Relevance ${toDisplayScore(story.relevanceScore)}; Score ${story.score}); reason=${story.reason ?? 'N/A'}`
+        );
         await sendStoryNotification(story);
         await markStoryAsSent(story.id);
         // Small delay to ensure order
@@ -116,7 +128,9 @@ async function main() {
     await sendErrorNotification(error);
     process.exit(1);
   } finally {
-    await closeDB();
+    if (!feedbackServerStarted) {
+      await closeDB();
+    }
     console.log('Done.');
   }
 }

@@ -1,0 +1,42 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Story {
+  id               Int             @id
+  title            String
+  url              String?
+  score            Int?
+  rank             Int?
+  date             String
+  reason           String?
+  relevanceScore   Int             @default(0) @map("relevance_score")
+  notificationSent Boolean         @default(false) @map("notification_sent")
+  firstSeenAt      DateTime        @default(now()) @map("first_seen_at")
+  lastNotifiedAt   DateTime?       @map("last_notified_at")
+  suppressedUntil  DateTime?       @map("suppressed_until")
+  feedbackEvents   FeedbackEvent[]
+
+  @@index([notificationSent])
+  @@index([date])
+  @@map("stories")
+}
+
+model FeedbackEvent {
+  id          String   @id @default(cuid())
+  storyId     Int      @map("story_id")
+  action      String
+  confidence  String
+  source      String
+  createdAt   DateTime @default(now()) @map("created_at")
+  metadata    String?
+  story       Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
+
+  @@index([storyId])
+  @@map("feedback_events")
+}

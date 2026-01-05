@@ -171,6 +171,10 @@ clone_and_build() {
     
     print_info "Building project..."
     npm run build
+
+    print_info "Applying Prisma schema..."
+    mkdir -p "$INSTALL_DIR/db"
+    DATABASE_URL="file:$INSTALL_DIR/db/hn.sqlite" npm run prisma:deploy
     
     # Restore backups if they exist
     if [[ -f /tmp/interests.json.backup ]]; then

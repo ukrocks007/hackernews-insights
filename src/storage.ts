@@ -1,106 +1,129 @@
-import sqlite3 from 'sqlite3';
-import { open, Database } from 'sqlite';
-import path from 'path';
+import { FeedbackEvent, Story } from '@prisma/client';
+import { computeRelevanceScore } from './feedback';
+import { disconnectPrisma, getPrismaClient, initPrisma } from './prismaClient';
 
-export interface Story {
+export type StoredStory = Story;
+
+export interface StoryInput {
   id: number;
   title: string;
-  url: string;
-  score: number;
-  rank: number;
+  url?: string | null;
+  score?: number | null;
+  rank?: number | null;
   date: string;
-  reason: string;
-  relevance_score: number;
-  notification_sent: boolean;
+  reason?: string | null;
+  relevanceScore?: number;
+  notificationSent?: boolean;
 }
 
-let db: Database | null = null;
+const BASE_RELEVANCE_SCORE = 100;
 
 export async function initDB(): Promise<void> {
-  // If running in pkg, use the directory of the executable. Otherwise use standard relative path.
-  const baseDir = (process as any).pkg ? path.dirname(process.execPath) : path.resolve(__dirname, '..');
-  const dbDir = path.join(baseDir, 'db');
-  
-  // Ensure db directory exists
-  const fs = require('fs');
-  if (!fs.existsSync(dbDir)) {
-    fs.mkdirSync(dbDir, { recursive: true });
-  }
-
-  const dbPath = path.join(dbDir, 'hn.sqlite');
-  
-  db = await open({
-    filename: dbPath,
-    driver: sqlite3.Database
-  });
-
-  await db.exec(`
-    CREATE TABLE IF NOT EXISTS stories (
-      id INTEGER PRIMARY KEY,
-      title TEXT NOT NULL,
-      url TEXT,
-      score INTEGER,
-      rank INTEGER,
-      date TEXT NOT NULL,
-      reason TEXT,
-      relevance_score INTEGER DEFAULT 0,
-      notification_sent INTEGER DEFAULT 0
-    )
-  `);
-
-  // Migration for existing tables
-  try {
-    await db.exec('ALTER TABLE stories ADD COLUMN relevance_score INTEGER DEFAULT 0');
-  } catch (e) { /* Column likely exists */ }
-  
-  try {
-    await db.exec('ALTER TABLE stories ADD COLUMN notification_sent INTEGER DEFAULT 0');
-  } catch (e) { /* Column likely exists */ }
-  
-  console.log('Database initialized at', dbPath);
+  await initPrisma();
 }
 
-export async function saveStory(story: Story): Promise<void> {
-  if (!db) throw new Error('Database not initialized');
-  
-  await db.run(
-    `INSERT OR IGNORE INTO stories (id, title, url, score, rank, date, reason, relevance_score, notification_sent)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [story.id, story.title, story.url, story.score, story.rank, story.date, story.reason, story.relevance_score, story.notification_sent ? 1 : 0]
-  );
+export async function saveStory(story: StoryInput): Promise<void> {
+  const prisma = getPrismaClient();
+  try {
+    await prisma.story.create({
+      data: {
+        id: story.id,
+        title: story.title,
+        url: story.url,
+        score: story.score ?? null,
+        rank: story.rank ?? null,
+        date: story.date,
+        reason: story.reason ?? null,
+        relevanceScore: story.relevanceScore ?? BASE_RELEVANCE_SCORE,
+        notificationSent: story.notificationSent ?? false,
+      },
+    });
+  } catch (error: any) {
+    if (error?.code === 'P2002') {
+      // Duplicate, ignore to preserve INSERT OR IGNORE semantics
+      return;
+    }
+    throw error;
+  }
+}
+
+function withoutRelations(story: Story & { feedbackEvents?: FeedbackEvent[] }): Story {
+  const { feedbackEvents: _events, ...rest } = story as Story & { feedbackEvents?: FeedbackEvent[] };
+  return rest;
+}
+
+async function refreshRelevance(story: Story & { feedbackEvents: FeedbackEvent[] }): Promise<Story & { feedbackEvents: FeedbackEvent[] }> {
+  const prisma = getPrismaClient();
+  const computation = computeRelevanceScore(story, story.feedbackEvents);
+
+  if (
+    computation.relevanceScore !== story.relevanceScore ||
+    (story.suppressedUntil ?? null)?.valueOf() !== (computation.suppressedUntil ?? null)?.valueOf()
+  ) {
+    if (computation.suppressedUntil && !story.suppressedUntil) {
+      console.log(`Story ${story.id} temporarily suppressed until ${computation.suppressedUntil.toISOString()}`);
+    }
+    if (!computation.suppressedUntil && story.suppressedUntil) {
+      console.log(`Story ${story.id} suppression cleared after feedback recovery`);
+    }
+    const updated = await prisma.story.update({
+      where: { id: story.id },
+      data: {
+        relevanceScore: computation.relevanceScore,
+        suppressedUntil: computation.suppressedUntil ?? null,
+      },
+    });
+
+    return { ...updated, feedbackEvents: story.feedbackEvents };
+  }
+
+  return story;
 }
 
 export async function getUnsentRelevantStories(): Promise<Story[]> {
-  if (!db) throw new Error('Database not initialized');
-  // Get all unsent stories, sorted by relevance score (desc) then HN score (desc)
-  const rows = await db.all('SELECT * FROM stories WHERE notification_sent = 0 ORDER BY relevance_score DESC, score DESC');
-  return rows.map(row => ({
-    ...row,
-    notification_sent: !!row.notification_sent
-  }));
+  const prisma = getPrismaClient();
+  const stories = await prisma.story.findMany({
+    where: {
+      notificationSent: false,
+      OR: [{ suppressedUntil: null }, { suppressedUntil: { lte: new Date() } }],
+    },
+    include: { feedbackEvents: true },
+    orderBy: [{ relevanceScore: 'desc' }, { score: 'desc' }],
+  });
+
+  const refreshed: Story[] = [];
+  for (const story of stories) {
+    const updated = await refreshRelevance(story);
+    refreshed.push(withoutRelations(updated));
+  }
+  refreshed.sort((a, b) => {
+    if (b.relevanceScore !== a.relevanceScore) {
+      return (b.relevanceScore || 0) - (a.relevanceScore || 0);
+    }
+    return (b.score || 0) - (a.score || 0);
+  });
+  return refreshed;
 }
 
 export async function markStoryAsSent(id: number): Promise<void> {
-  if (!db) throw new Error('Database not initialized');
-  await db.run('UPDATE stories SET notification_sent = 1 WHERE id = ?', id);
+  const prisma = getPrismaClient();
+  await prisma.story.update({
+    where: { id },
+    data: { notificationSent: true, lastNotifiedAt: new Date() },
+  });
 }
 
 export async function hasStoryBeenProcessed(id: number): Promise<boolean> {
-  if (!db) throw new Error('Database not initialized');
-  
-  const result = await db.get('SELECT id FROM stories WHERE id = ?', id);
+  const prisma = getPrismaClient();
+  const result = await prisma.story.findUnique({ where: { id } });
   return !!result;
 }
 
 export async function getStoriesForDate(date: string): Promise<Story[]> {
-  if (!db) throw new Error('Database not initialized');
-  
-  return await db.all('SELECT * FROM stories WHERE date = ?', date);
+  const prisma = getPrismaClient();
+  return prisma.story.findMany({ where: { date } });
 }
 
 export async function closeDB(): Promise<void> {
-  if (db) {
-    await db.close();
-    db = null;
-  }
+  await disconnectPrisma();
 }

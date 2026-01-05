@@ -1,11 +1,13 @@
 import dotenv from 'dotenv';
-import { Story } from './storage';
+import { StoredStory } from './storage';
+import { buildSignedFeedbackLink, toDisplayScore } from './feedback';
 
 dotenv.config();
 
 const PUSHOVER_USER_KEY = process.env.PUSHOVER_USER_KEY;
 const PUSHOVER_API_TOKEN = process.env.PUSHOVER_API_TOKEN;
 const PUSHOVER_URL = 'https://api.pushover.net/1/messages.json';
+let warnedMissingSecret = false;
 
 export async function sendNotification(message: string, title: string = 'HN Insights'): Promise<void> {
   if (!PUSHOVER_USER_KEY || !PUSHOVER_API_TOKEN) {
@@ -37,15 +39,42 @@ export async function sendNotification(message: string, title: string = 'HN Insi
   }
 }
 
-export async function sendStoryNotification(story: Story): Promise<void> {
-  const message = `<b><a href="${story.url}">${story.title}</a></b>\n` +
-                  `<i>${story.reason}</i>\n` +
-                  `(Relevance: ${story.relevance_score}/10, Score: ${story.score})`;
-  
+function feedbackLinks(storyId: number): string {
+  const actions: Array<{ label: string; action: 'LIKE' | 'DISLIKE' | 'SAVE' }> = [
+    { label: '👍 Relevant', action: 'LIKE' },
+    { label: '👎 Not relevant', action: 'DISLIKE' },
+    { label: '📌 Save for later', action: 'SAVE' },
+  ];
+
+  const rendered = actions
+    .map(({ label, action }) => {
+      const url = buildSignedFeedbackLink(storyId, action);
+      if (!url) {
+        if (!warnedMissingSecret) {
+          console.warn('Feedback secret is missing; feedback links will be skipped.');
+          warnedMissingSecret = true;
+        }
+        return null;
+      }
+      return `<a href="${url}">${label}</a>`;
+    })
+    .filter(Boolean)
+    .join(' | ');
+
+  return rendered ? `\n${rendered}` : '';
+}
+
+export async function sendStoryNotification(story: StoredStory): Promise<void> {
+  const message =
+    `<b><a href="${story.url}">${story.title}</a></b>\n` +
+    `<i>${story.reason ?? 'Highly relevant to your interests'}</i>\n` +
+    `(Relevance: ${toDisplayScore(story.relevanceScore)}, Score: ${story.score ?? 0})` +
+    feedbackLinks(story.id);
+
   await sendNotification(message, 'HN Insight');
 }
 
-export async function sendDailySummary(stories: Story[]): Promise<void> {
+export async function sendDailySummary(stories: StoredStory[]): Promise<void> {
   // Deprecated in favor of individual notifications, but kept for compatibility if needed
   if (stories.length === 0) return;
   
