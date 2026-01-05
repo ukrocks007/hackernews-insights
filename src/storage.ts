@@ -48,17 +48,19 @@ export async function saveStory(story: StoryInput): Promise<void> {
 }
 
 function withoutRelations(story: Story & { feedbackEvents?: FeedbackEvent[] }): Story {
-  const { feedbackEvents: _events, ...rest } = story as Story & { feedbackEvents?: FeedbackEvent[] };
+  const { feedbackEvents: _events, ...rest } = story;
   return rest;
 }
 
 async function refreshRelevance(story: Story & { feedbackEvents: FeedbackEvent[] }): Promise<Story & { feedbackEvents: FeedbackEvent[] }> {
   const prisma = getPrismaClient();
   const computation = computeRelevanceScore(story, story.feedbackEvents);
+  const currentSuppression = story.suppressedUntil?.getTime() ?? null;
+  const nextSuppression = computation.suppressedUntil?.getTime() ?? null;
 
   if (
     computation.relevanceScore !== story.relevanceScore ||
-    (story.suppressedUntil ?? null)?.valueOf() !== (computation.suppressedUntil ?? null)?.valueOf()
+    currentSuppression !== nextSuppression
   ) {
     if (computation.suppressedUntil && !story.suppressedUntil) {
       console.log(`Story ${story.id} temporarily suppressed until ${computation.suppressedUntil.toISOString()}`);

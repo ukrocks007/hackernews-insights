@@ -109,7 +109,7 @@ export function verifyFeedbackSignature(
 }
 
 function decayFactor(createdAt: Date): number {
-  const hoursAgo = (Date.now() - createdAt.getTime()) / (1000 * 60 * 60);
+  const hoursAgo = Math.max(0, (Date.now() - createdAt.getTime()) / (1000 * 60 * 60));
   const lambda = Math.log(2) / DECAY_HALF_LIFE_HOURS;
   return Math.exp(-lambda * hoursAgo);
 }
@@ -144,8 +144,8 @@ export function computeRelevanceScore(story: Story, feedbackEvents: FeedbackEven
       try {
         const host = new URL(story.url).hostname.replace(/^www\./, '');
         tagTotals.set(host, (tagTotals.get(host) || 0) + contribution);
-      } catch {
-        // ignore invalid URL
+      } catch (error) {
+        console.warn(`Invalid story URL for tag aggregation (story ${story.id}):`, error);
       }
     }
     sourceTotals.set(event.source, (sourceTotals.get(event.source) || 0) + contribution);
@@ -203,7 +203,7 @@ export async function recordFeedbackEvent(payload: FeedbackPayload): Promise<Rel
       where: { id: story.id },
       data: {
         relevanceScore: computation.relevanceScore,
-        suppressedUntil: computation.suppressedUntil ?? undefined,
+        suppressedUntil: computation.suppressedUntil ?? null,
       },
     });
     return computation;

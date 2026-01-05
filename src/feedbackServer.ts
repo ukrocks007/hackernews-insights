@@ -50,6 +50,10 @@ export async function startFeedbackServer(options: FeedbackServerOptions = {}): 
       }
 
       const url = new URL(req.url, `http://${req.headers.host || `localhost:${port}`}`);
+      const allowedOrigin = process.env.FEEDBACK_ALLOW_ORIGIN || '*';
+      if (allowedOrigin) {
+        res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
+      }
 
       if (url.pathname !== '/api/feedback' || req.method !== 'GET') {
         res.writeHead(404).end();
@@ -102,7 +106,11 @@ export async function startFeedbackServer(options: FeedbackServerOptions = {}): 
     setTimeout(async () => {
       console.log(`Shutting down feedback server after ${serverTtlHours}h window.`);
       server.close(async () => {
-        await disconnectPrisma();
+        try {
+          await disconnectPrisma();
+        } catch (error) {
+          console.error('Failed to disconnect Prisma during feedback server shutdown', error);
+        }
       });
     }, serverTtlHours * 60 * 60 * 1000);
   }
