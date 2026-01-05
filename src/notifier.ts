@@ -8,6 +8,13 @@ const PUSHOVER_USER_KEY = process.env.PUSHOVER_USER_KEY;
 const PUSHOVER_API_TOKEN = process.env.PUSHOVER_API_TOKEN;
 const PUSHOVER_URL = 'https://api.pushover.net/1/messages.json';
 let warnedMissingSecret = false;
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
 
 export async function sendNotification(message: string, title: string = 'HN Insights'): Promise<void> {
   if (!PUSHOVER_USER_KEY || !PUSHOVER_API_TOKEN) {
@@ -56,7 +63,7 @@ function feedbackLinks(storyId: number): string {
         }
         return null;
       }
-      return `<a href="${url}">${label}</a>`;
+      return `<a href="${url}">${escapeHtml(label)}</a>`;
     })
     .filter(Boolean)
     .join(' | ');

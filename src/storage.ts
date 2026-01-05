@@ -1,5 +1,5 @@
 import { FeedbackEvent, Story } from '@prisma/client';
-import { computeRelevanceScore } from './feedback';
+import { computeRelevanceScore, SCORE_SCALE } from './feedback';
 import { disconnectPrisma, getPrismaClient, initPrisma } from './prismaClient';
 
 export type StoredStory = Story;
@@ -16,7 +16,7 @@ export interface StoryInput {
   notificationSent?: boolean;
 }
 
-const BASE_RELEVANCE_SCORE = 100;
+const DEFAULT_RELEVANCE_SCORE = SCORE_SCALE;
 
 export async function initDB(): Promise<void> {
   await initPrisma();
@@ -34,7 +34,7 @@ export async function saveStory(story: StoryInput): Promise<void> {
         rank: story.rank ?? null,
         date: story.date,
         reason: story.reason ?? null,
-        relevanceScore: story.relevanceScore ?? BASE_RELEVANCE_SCORE,
+        relevanceScore: story.relevanceScore ?? DEFAULT_RELEVANCE_SCORE,
         notificationSent: story.notificationSent ?? false,
       },
     });
@@ -93,18 +93,15 @@ export async function getUnsentRelevantStories(): Promise<Story[]> {
     orderBy: [{ relevanceScore: 'desc' }, { score: 'desc' }],
   });
 
-  const refreshed: Story[] = [];
-  for (const story of stories) {
-    const updated = await refreshRelevance(story);
-    refreshed.push(withoutRelations(updated));
-  }
-  refreshed.sort((a, b) => {
+  const refreshedStories = await Promise.all(stories.map(refreshRelevance));
+  const normalized = refreshedStories.map(withoutRelations);
+  normalized.sort((a, b) => {
     if (b.relevanceScore !== a.relevanceScore) {
       return (b.relevanceScore || 0) - (a.relevanceScore || 0);
     }
     return (b.score || 0) - (a.score || 0);
   });
-  return refreshed;
+  return normalized;
 }
 
 export async function markStoryAsSent(id: number): Promise<void> {

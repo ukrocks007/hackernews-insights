@@ -22,9 +22,12 @@ const IMPLICIT_WEIGHTS: Record<FeedbackAction, number> = {
   IGNORED: -0.2,
 };
 
-const SCORE_SCALE = 100;
+export const SCORE_SCALE = 100;
 const DECAY_HALF_LIFE_HOURS = 36;
 const SUPPRESSION_THRESHOLD = -150; // scaled score
+const MIN_SUPPRESSION_HOURS = 6;
+const MAX_SUPPRESSION_HOURS = 48;
+const SUPPRESSION_HOURS_PER_POINT = 2;
 
 export const FEEDBACK_ACTIONS: FeedbackAction[] = ['LIKE', 'DISLIKE', 'SAVE', 'OPENED', 'IGNORED'];
 
@@ -72,7 +75,9 @@ export function buildSignedFeedbackLink(
   const payload = buildSigningPayload(storyId, action, confidence, source, timestamp);
   const sig = crypto.createHmac('sha256', secret).update(payload).digest('hex');
 
-  const normalizedBase = (baseUrl || process.env.FEEDBACK_BASE_URL || `http://localhost:${process.env.FEEDBACK_PORT || 3000}`).replace(/\/$/, '');
+  const configuredBase = baseUrl || process.env.FEEDBACK_BASE_URL;
+  const fallbackBase = `http://localhost:${process.env.FEEDBACK_PORT || 3000}`;
+  const normalizedBase = (configuredBase || fallbackBase).replace(/\/$/, '');
   const url = new URL(`${normalizedBase}/api/feedback`);
   url.searchParams.set('storyId', storyId.toString());
   url.searchParams.set('action', action);
@@ -166,7 +171,10 @@ export function computeRelevanceScore(story: Story, feedbackEvents: FeedbackEven
   const roundedScore = Math.round(aggregate);
   if (roundedScore < SUPPRESSION_THRESHOLD) {
     // Suppress temporarily but allow rebound after decay
-    const hours = Math.min(48, Math.max(6, Math.round(Math.abs(roundedScore) / SCORE_SCALE) * 2));
+    const hours = Math.min(
+      MAX_SUPPRESSION_HOURS,
+      Math.max(MIN_SUPPRESSION_HOURS, Math.round(Math.abs(roundedScore) / SCORE_SCALE) * SUPPRESSION_HOURS_PER_POINT)
+    );
     suppressedUntil = new Date(Date.now() + hours * 60 * 60 * 1000);
     reasons.push(`Suppressed for ${hours}h due to low relevance (${toDisplayScore(roundedScore)})`);
   } else if (roundedScore > 0 && suppressedUntil && suppressedUntil > new Date()) {
