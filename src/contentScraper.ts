@@ -7,6 +7,7 @@ export interface ContentSignals {
   headings: string[];
   paragraphs: string[];
   hasCodeBlocks: boolean;
+  bodyText: string;
 }
 
 export async function scrapeStoryContent(url: string): Promise<ContentSignals | null> {
@@ -53,6 +54,36 @@ export async function scrapeStoryContent(url: string): Promise<ContentSignals | 
         .slice(0, 3);
     });
 
+    const bodyText = await page.evaluate(() => {
+      const MAX_CHARS = 8000;
+      const preferred = document.querySelector('article') || document.querySelector('main');
+      const root = preferred || document.body;
+      const blacklist = new Set(['SCRIPT', 'STYLE', 'NAV', 'FOOTER', 'HEADER', 'NOSCRIPT', 'FORM', 'ASIDE']);
+
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+        acceptNode(node) {
+          const text = (node.textContent || '').trim();
+          if (!text || text.length < 40) return NodeFilter.FILTER_SKIP;
+          const parent = (node as any).parentElement;
+          if (parent && blacklist.has(parent.tagName)) return NodeFilter.FILTER_SKIP;
+          return NodeFilter.FILTER_ACCEPT;
+        }
+      });
+
+      const chunks: string[] = [];
+      while (walker.nextNode()) {
+        const text = (walker.currentNode.textContent || '').replace(/\s+/g, ' ').trim();
+        if (text) chunks.push(text);
+        if (chunks.join(' ').length > MAX_CHARS * 1.2) break; // soft stop to avoid extra work
+      }
+
+      const joined = chunks.join(' ');
+      if (joined.length <= MAX_CHARS) return joined;
+      const truncated = joined.slice(0, MAX_CHARS);
+      const lastSpace = truncated.lastIndexOf(' ');
+      return truncated.slice(0, lastSpace > 2000 ? lastSpace : MAX_CHARS);
+    });
+
     const hasCodeBlocks = await page.$('pre code, .highlight, .code') !== null;
 
     return {
@@ -60,7 +91,8 @@ export async function scrapeStoryContent(url: string): Promise<ContentSignals | 
       description: (description as string).slice(0, 200),
       headings: headings.map(h => h.slice(0, 100)),
       paragraphs: paragraphs.map(p => p.slice(0, 300)),
-      hasCodeBlocks
+      hasCodeBlocks,
+      bodyText: (bodyText || '').slice(0, 8000)
     };
 
   } catch (error) {

@@ -16,6 +16,12 @@ export interface StoryInput {
   notificationSent?: boolean;
 }
 
+export interface TopicInput {
+  name: string;
+  source: 'title' | 'content' | 'refined';
+  weight?: number;
+}
+
 // New stories start at SCORE_SCALE (represents a baseline relevance of 1.0)
 const DEFAULT_RELEVANCE_SCORE = SCORE_SCALE;
 
@@ -23,7 +29,44 @@ export async function initDB(): Promise<void> {
   await initPrisma();
 }
 
-export async function saveStory(story: StoryInput): Promise<void> {
+function normalizeTopicName(topic: string): string {
+  return topic.trim().toLowerCase();
+}
+
+async function persistTopicsForStory(storyId: number, topics: TopicInput[]): Promise<void> {
+  if (!topics.length) return;
+  const prisma = getPrismaClient();
+
+  for (const topic of topics) {
+    const name = normalizeTopicName(topic.name);
+    if (!name) continue;
+
+    const weight = topic.weight ?? Math.round(SCORE_SCALE * 0.3);
+    const topicRecord = await prisma.topic.upsert({
+      where: { name },
+      update: { score: { increment: weight } },
+      create: { name, score: weight },
+    });
+
+    try {
+      await prisma.storyTopic.create({
+        data: {
+          storyId,
+          topicId: topicRecord.id,
+          source: topic.source,
+          weight,
+        },
+      });
+    } catch (error: any) {
+      if (error?.code !== 'P2002') {
+        console.error('Unexpected error while saving story topic', { storyId, name, error });
+        throw error;
+      }
+    }
+  }
+}
+
+export async function saveStory(story: StoryInput, topics: TopicInput[] = []): Promise<void> {
   const prisma = getPrismaClient();
   try {
     await prisma.story.create({
@@ -39,6 +82,7 @@ export async function saveStory(story: StoryInput): Promise<void> {
         notificationSent: story.notificationSent ?? false,
       },
     });
+    await persistTopicsForStory(story.id, topics);
   } catch (error: any) {
     if (error?.code === 'P2002') {
       // Duplicate, ignore to preserve INSERT OR IGNORE semantics

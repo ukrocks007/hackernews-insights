@@ -246,6 +246,25 @@ export async function recordFeedbackEvent(payload: FeedbackPayload): Promise<Rel
         suppressedUntil: computation.suppressedUntil ?? null,
       },
     });
+
+    const actionWeights: Record<FeedbackAction, number> = {
+      LIKE: 1.0,
+      DISLIKE: -1.0,
+      SAVE: 1.2,
+      OPENED: 0.3,
+      IGNORED: -0.2,
+    };
+    const topicDelta = actionWeights[payload.action] ?? 0;
+    if (topicDelta !== 0) {
+      const scaled = Math.round(topicDelta * SCORE_SCALE * (payload.confidence === 'implicit' ? 0.4 : 0.7));
+      const links = await prisma.storyTopic.findMany({ where: { storyId: payload.storyId } });
+      for (const link of links) {
+        await prisma.topic.update({
+          where: { id: link.topicId },
+          data: { score: { increment: scaled } },
+        });
+      }
+    }
     return computation;
   } catch (error) {
     console.error('Failed to record feedback event', error);

@@ -21,6 +21,7 @@ model Story {
   lastNotifiedAt   DateTime?       @map("last_notified_at")
   suppressedUntil  DateTime?       @map("suppressed_until")
   feedbackEvents   FeedbackEvent[]
+  storyTopics      StoryTopic[]
 
   @@index([notificationSent])
   @@index([date])
@@ -39,4 +40,27 @@ model FeedbackEvent {
 
   @@index([storyId])
   @@map("feedback_events")
+}
+
+model Topic {
+  id        Int           @id @default(autoincrement())
+  name      String        @unique
+  score     Int           @default(0)
+  createdAt DateTime      @default(now()) @map("created_at")
+  updatedAt DateTime      @updatedAt @map("updated_at")
+  storyRefs StoryTopic[]
+
+  @@map("topics")
+}
+
+model StoryTopic {
+  storyId  Int    @map("story_id")
+  topicId  Int    @map("topic_id")
+  source   String
+  weight   Int    @default(0)
+  story    Story  @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  topic    Topic  @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  @@id([storyId, topicId])
+  @@map("story_topics")
 }

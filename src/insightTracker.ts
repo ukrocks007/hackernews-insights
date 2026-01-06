@@ -1,9 +1,11 @@
-import { scrapeStoryContent } from "./contentScraper";
+import { scrapeStoryContent, ContentSignals } from "./contentScraper";
 import { INITIAL_RELEVANCE_SCORE, toDisplayScore } from "./feedback";
 import { scrapeTopStories } from "./hnScraper";
 import { sendNotification, sendStoryNotification } from "./notifier";
 import { MIN_HN_SCORE, checkRelevance } from "./relevanceAgent";
-import { hasStoryBeenProcessed, StoryInput, saveStory, getUnsentRelevantStories, markStoryAsSent } from "./storage";
+import { hasStoryBeenProcessed, StoryInput, saveStory, getUnsentRelevantStories, markStoryAsSent, TopicInput } from "./storage";
+import { extractTopics } from "./topicExtractor";
+import logger from "./logger";
 
 async function fetchAndFilterStories() {
   let relevantStoriesFound = 0;
@@ -43,12 +45,29 @@ async function fetchAndFilterStories() {
 
       // Scrape Content
       console.log(`Fetching content for: "${story.title}"...`);
-      const content = await scrapeStoryContent(story.url);
+      const scrapedContent = await scrapeStoryContent(story.url);
+      const content: ContentSignals = scrapedContent ?? {
+        pageTitle: story.title,
+        description: '',
+        headings: [],
+        paragraphs: [],
+        hasCodeBlocks: false,
+        bodyText: '',
+      };
 
-      if (!content) {
-        console.log(`Skipping "${story.title}" (Content fetch failed or skipped)`);
-        continue;
+      if (!scrapedContent) {
+        logger.warn(`Content fetch failed for "${story.title}". Using title/URL only.`);
       }
+
+      const topics = extractTopics(story.title, story.url, scrapedContent);
+      const topicInputs: TopicInput[] = topics.finalTopics.map(name => ({
+        name,
+        source: scrapedContent ? 'content' : 'title',
+        weight: scrapedContent ? Math.round(INITIAL_RELEVANCE_SCORE * 0.3) : Math.round(INITIAL_RELEVANCE_SCORE * 0.15),
+      }));
+      logger.info(
+        `Topics for "${story.title}": ${topics.finalTopics.join(', ') || 'none'} (removed: ${topics.removed.join(', ') || 'none'}, added: ${topics.added.join(', ') || 'none'})`
+      );
 
       console.log(`Checking relevance for: "${story.title}"...`);
       const result = await checkRelevance(story, content);
@@ -64,7 +83,7 @@ async function fetchAndFilterStories() {
           notificationSent: false,
         };
 
-        await saveStory(fullStory);
+        await saveStory(fullStory, topicInputs);
         relevantStoriesFound++;
       } else {
         console.log(`IGNORE: ${story.title}`);
