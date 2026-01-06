@@ -3,6 +3,7 @@ import path from 'path';
 import dotenv from 'dotenv';
 import { ScrapedStory } from './hnScraper';
 import { ContentSignals } from './contentScraper';
+import logger from './logger';
 
 dotenv.config();
 
@@ -37,7 +38,7 @@ function getInterests(): string[] {
     
     return [];
   } catch (error) {
-    console.error('Error reading interests.json:', error);
+    logger.error(`Error reading interests.json: ${error}`);
     return [];
   }
 }
@@ -130,7 +131,7 @@ Content signals:
     return null;
 
   } catch (error) {
-    console.error(`Error checking relevance for story "${story.title}":`, error);
+    logger.error(`Error checking relevance for story "${story.title}": ${error}`);
     throw error;
   }
 }

@@ -3,3 +3,4 @@ dist
 .env
 db/hn.sqlite
 prisma/db/
+cron.log

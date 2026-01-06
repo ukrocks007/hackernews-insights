@@ -1,5 +1,6 @@
 import { chromium, Browser, Page } from 'playwright';
 import dotenv from 'dotenv';
+import logger from './logger';
 
 dotenv.config();
 
@@ -12,7 +13,7 @@ export interface ScrapedStory {
 }
 
 export async function scrapeTopStories(count: number = 30, pageNumber: number = 1): Promise<ScrapedStory[]> {
-  console.log(`Launching browser for page ${pageNumber}...`);
+  logger.info(`Launching browser for page ${pageNumber}...`);
   const browser: Browser = await chromium.launch({
     headless: process.env.HEADLESS !== 'false', // Default to true
   });
@@ -27,13 +28,13 @@ export async function scrapeTopStories(count: number = 30, pageNumber: number = 
 
   try {
     const url = pageNumber === 1 ? 'https://news.ycombinator.com/' : `https://news.ycombinator.com/news?p=${pageNumber}`;
-    console.log(`Navigating to Hacker News (Page ${pageNumber})...`);
+    logger.info(`Navigating to Hacker News (Page ${pageNumber})...`);
     await page.goto(url, { waitUntil: 'domcontentloaded' });
 
     // Wait for the main table to load
     await page.waitForSelector('#hnmain');
 
-    console.log('Extracting stories...');
+    logger.info('Extracting stories...');
     
     // HN structure: 
     // <tr class="athing" id="38876543">...</tr>
@@ -84,10 +85,10 @@ export async function scrapeTopStories(count: number = 30, pageNumber: number = 
       });
     }
     
-    console.log(`Extracted ${stories.length} stories.`);
+    logger.info(`Extracted ${stories.length} stories.`);
     
   } catch (error) {
-    console.error('Error scraping HN:', error);
+    logger.error(`Error scraping HN: ${error}`);
     throw error;
   } finally {
     await browser.close();

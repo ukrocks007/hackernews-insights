@@ -1,6 +1,7 @@
 import dotenv from 'dotenv';
 import { StoredStory } from './storage';
 import { buildSignedFeedbackLink, toDisplayScore } from './feedback';
+import logger from './logger';
 
 dotenv.config();
 
@@ -19,8 +20,8 @@ function escapeHtml(text: string): string {
 
 export async function sendNotification(message: string, title: string = 'HN Insights'): Promise<void> {
   if (!PUSHOVER_USER_KEY || !PUSHOVER_API_TOKEN) {
-    console.warn('Pushover credentials not found. Skipping notification.');
-    console.log(`[Notification] ${title}: ${message}`);
+    logger.warn('Pushover credentials not found. Skipping notification.');
+    logger.info(`[Notification] ${title}: ${message}`);
     return;
   }
 
@@ -41,9 +42,9 @@ export async function sendNotification(message: string, title: string = 'HN Insi
       throw new Error(`Pushover API error: ${response.status}`);
     }
     
-    console.log('Notification sent successfully.');
+    logger.info('Notification sent successfully.');
   } catch (error) {
-    console.error('Error sending notification:', error);
+    logger.error(`Error sending notification: ${error}`);
   }
 }
 
