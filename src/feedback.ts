@@ -30,6 +30,7 @@ const MAX_SUPPRESSION_HOURS = 48;
 const SUPPRESSION_HOURS_PER_POINT = 2;
 const TAG_ADJUSTMENT_FACTOR = 0.1;
 const SOURCE_ADJUSTMENT_FACTOR = 0.05;
+export const INITIAL_RELEVANCE_SCORE = 150;
 
 export const FEEDBACK_ACTIONS: FeedbackAction[] = ['LIKE', 'DISLIKE', 'SAVE', 'OPENED', 'IGNORED'];
 
@@ -104,7 +105,9 @@ export function verifyFeedbackSignature(
   if (!secret) return false;
 
   const now = Date.now();
-  if (Math.abs(now - timestamp) > ttlHours * 60 * 60 * 1000) return false;
+  const ttlMs = ttlHours * 60 * 60 * 1000;
+  if (timestamp > now) return false;
+  if (now - timestamp > ttlMs) return false;
 
   const payload = buildSigningPayload(storyId, action, confidence, source, timestamp);
   const expected = crypto.createHmac('sha256', secret).update(payload).digest();
@@ -116,7 +119,14 @@ export function verifyFeedbackSignature(
 }
 
 function decayFactor(createdAt: Date): number {
-  const hoursAgo = Math.max(0, (Date.now() - createdAt.getTime()) / (1000 * 60 * 60));
+  const rawHoursAgo = (Date.now() - createdAt.getTime()) / (1000 * 60 * 60);
+  if (rawHoursAgo < 0) {
+    console.warn('decayFactor: createdAt is in the future', {
+      createdAt: createdAt.toISOString(),
+      now: new Date().toISOString(),
+    });
+  }
+  const hoursAgo = Math.max(0, rawHoursAgo);
   const lambda = Math.log(2) / DECAY_HALF_LIFE_HOURS;
   return Math.exp(-lambda * hoursAgo);
 }
@@ -140,10 +150,20 @@ export function computeRelevanceScore(story: Story, feedbackEvents: FeedbackEven
   const sourceTotals = new Map<string, number>();
   const storyHost = story.url
     ? (() => {
+        const rawUrl = story.url.trim();
         try {
-          return new URL(story.url).hostname.replace(/^www\./, '');
-        } catch (error) {
-          console.warn(`Invalid story URL '${story.url}' for domain extraction (story ${story.id}):`, error);
+          return new URL(rawUrl).hostname.replace(/^(www\.|m\.|mobile\.)/, '');
+        } catch (firstError) {
+          const hasScheme = /^[a-zA-Z][a-zA-Z\d+\-.]*:\/\//.test(rawUrl);
+          const normalizedUrl = hasScheme ? rawUrl : `https://${rawUrl}`;
+          try {
+            return new URL(normalizedUrl).hostname.replace(/^(www\.|m\.|mobile\.)/, '');
+          } catch (secondError) {
+            console.warn(
+              `Invalid story URL '${story.url}' for domain extraction (story ${story.id}) after normalization:`,
+              secondError,
+            );
+          }
           return null;
         }
       })()
@@ -206,6 +226,7 @@ export async function recordFeedbackEvent(payload: FeedbackPayload): Promise<Rel
         action: payload.action,
         confidence: payload.confidence,
         source: payload.source,
+        // Stored as string because SQLite connector lacks native Json support in this Prisma version.
         metadata: payload.metadata ? JSON.stringify(payload.metadata) : null,
       },
     });

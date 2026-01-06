@@ -71,13 +71,17 @@ export async function startFeedbackServer(options: FeedbackServerOptions = {}): 
       const signature = url.searchParams.get('sig') || '';
 
       if (!storyId || !action || !timestamp || !signature) {
-        res.writeHead(200, { 'Content-Type': 'text/html' }).end(renderResponse('This feedback link is invalid or missing data.'));
+        res
+          .writeHead(400, { 'Content-Type': 'text/html' })
+          .end(renderResponse('This feedback link is invalid or missing data.'));
         return;
       }
 
       const verified = verifyFeedbackSignature(storyId, action, confidence, source, timestamp, signature, ttlHours);
       if (!verified) {
-        res.writeHead(200, { 'Content-Type': 'text/html' }).end(renderResponse('This feedback link has expired.'));
+        res
+          .writeHead(410, { 'Content-Type': 'text/html' })
+          .end(renderResponse('This feedback link has expired.'));
         return;
       }
 
@@ -98,7 +102,7 @@ export async function startFeedbackServer(options: FeedbackServerOptions = {}): 
     } catch (error) {
       console.error('Feedback endpoint error', error);
       res
-        .writeHead(200, { 'Content-Type': 'text/html' })
+        .writeHead(500, { 'Content-Type': 'text/html' })
         .end(renderResponse('We could not process your feedback right now. Please try again later.'));
     }
   });
@@ -116,6 +120,7 @@ export async function startFeedbackServer(options: FeedbackServerOptions = {}): 
       });
     }, serverTtlHours * 60 * 60 * 1000);
     shutdownTimer.unref();
+    server.on('close', () => clearTimeout(shutdownTimer));
   }
 
   return server;

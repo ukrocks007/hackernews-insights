@@ -44,13 +44,17 @@ export async function saveStory(story: StoryInput): Promise<void> {
       // Duplicate, ignore to preserve INSERT OR IGNORE semantics
       return;
     }
+    console.error('Unexpected error while saving story', { storyId: story.id, error });
     throw error;
   }
 }
 
 function withoutRelations(story: Story & { feedbackEvents?: FeedbackEvent[] }): Story {
+  if (!('feedbackEvents' in story)) {
+    return story;
+  }
   const { feedbackEvents: _feedbackEvents, ...rest } = story;
-  return rest;
+  return rest as Story;
 }
 
 async function refreshRelevance(story: Story & { feedbackEvents: FeedbackEvent[] }): Promise<Story & { feedbackEvents: FeedbackEvent[] }> {
@@ -97,6 +101,7 @@ export async function getUnsentRelevantStories(): Promise<Story[]> {
     include: { feedbackEvents: true },
   });
 
+  // Sequential to avoid hammering SQLite with concurrent writes during refresh.
   const refreshedStories: Array<Story & { feedbackEvents: FeedbackEvent[] }> = [];
   for (const story of stories) {
     refreshedStories.push(await refreshRelevance(story));

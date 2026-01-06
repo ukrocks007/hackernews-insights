@@ -23,7 +23,9 @@ function resolveDatabaseUrl(): string {
 export function getPrismaClient(): PrismaClient {
   if (!prisma) {
     const url = resolveDatabaseUrl();
-    process.env.DATABASE_URL = url;
+    if (!process.env.DATABASE_URL || process.env.DATABASE_URL.trim().length === 0) {
+      process.env.DATABASE_URL = url;
+    }
     prisma = new PrismaClient({
       datasources: {
         db: { url },

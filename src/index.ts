@@ -4,11 +4,9 @@ import { checkRelevance, MIN_HN_SCORE, MAX_RANK } from './relevanceAgent';
 import { sendStoryNotification, sendErrorNotification, sendNotification } from './notifier';
 import { scrapeStoryContent } from './contentScraper';
 import { startFeedbackServer } from './feedbackServer';
-import { toDisplayScore } from './feedback';
+import { INITIAL_RELEVANCE_SCORE, toDisplayScore } from './feedback';
 
 async function main() {
-  let feedbackServerStarted = false;
-  const INITIAL_RELEVANCE_BOOST = 150;
   try {
     console.log('Starting HN Insights Agent...');
     
@@ -16,9 +14,15 @@ async function main() {
     await initDB();
     try {
       await startFeedbackServer();
-      feedbackServerStarted = true;
     } catch (error) {
-      console.warn('Feedback server failed to start, continuing without feedback endpoint.', error);
+      const reason = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+      console.warn(
+        'Feedback server failed to start. Possible causes include the feedback port already being in use or missing configuration (e.g., environment variables). Continuing without feedback endpoint.',
+        '\nReason:',
+        reason,
+        '\nRaw error:',
+        error
+      );
     }
 
     let relevantStoriesFound = 0;
@@ -76,7 +80,7 @@ async function main() {
             ...story,
             date: new Date().toISOString().split('T')[0], // YYYY-MM-DD
             reason: result.reason,
-            relevanceScore: INITIAL_RELEVANCE_BOOST, // boost initial relevance for freshly matched stories (scaled)
+            relevanceScore: INITIAL_RELEVANCE_SCORE, // boost initial relevance for freshly matched stories (scaled)
             notificationSent: false,
           };
 
