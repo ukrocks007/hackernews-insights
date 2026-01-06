@@ -30,6 +30,28 @@ interface FallbackBrowsingOptions {
 
 const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
 const BROWSING_MODEL = process.env.BROWSING_MODEL || 'qwen:0.5b';
+const BLOCKED_RESOURCE_GLOB = '**/*.{png,jpg,jpeg,gif,webp,svg,css,woff,woff2,mp4,mp3}';
+const DEFAULT_FALLBACK_USER_AGENT =
+  'Mozilla/5.0 (compatible; HackerNewsInsights/1.0; +https://github.com/ukrocks007/hackernews-insights)';
+
+function parsePositiveNumber(value: string | undefined, fallback: number): number {
+  const parsed = Number(value);
+  if (Number.isFinite(parsed) && parsed > 0) {
+    return parsed;
+  }
+  return fallback;
+}
+
+async function extractHeadings(page: Page, max: number = 5): Promise<string[]> {
+  return page
+    .$$eval('h1, h2', els =>
+      els
+        .map(el => (el as HTMLElement).innerText.trim())
+        .filter(Boolean)
+        .slice(0, max)
+    )
+    .catch(() => []);
+}
 
 function isDomainAllowed(url: string, allowlist: string[]): boolean {
   try {
@@ -44,14 +66,7 @@ function isDomainAllowed(url: string, allowlist: string[]): boolean {
 async function captureSnapshot(page: Page, url: string): Promise<Snapshot> {
   const title = (await page.title()) || '';
 
-  const headings = await page
-    .$$eval('h1, h2', els =>
-      els
-        .map(el => (el as HTMLElement).innerText.trim())
-        .filter(Boolean)
-        .slice(0, 5)
-    )
-    .catch(() => []);
+  const headings = await extractHeadings(page);
 
   const snippets = await page
     .$$eval('p', els =>
@@ -87,14 +102,7 @@ async function extractContentFromPage(page: Page): Promise<ContentSignals> {
       .catch(() => page.$eval('meta[property="og:description"]', el => el.getAttribute('content')))
       .catch(() => '')) || '';
 
-  const headings = await page
-    .$$eval('h1, h2', els =>
-      els
-        .map(el => (el as HTMLElement).innerText.trim())
-        .filter(t => t.length > 0)
-        .slice(0, 5)
-    )
-    .catch(() => []);
+  const headings = await extractHeadings(page);
 
   const paragraphs = await page
     .$$eval('p', els =>
@@ -155,11 +163,16 @@ Never propose multiple steps, never include prose outside JSON.`;
     stream: false,
   };
 
+  const controller = new AbortController();
+  const decisionTimeout = parsePositiveNumber(process.env.FALLBACK_DECISION_TIMEOUT_MS, 15000);
+  const timer = setTimeout(() => controller.abort(), decisionTimeout);
+
   try {
     const response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
+      signal: controller.signal,
     });
 
     if (!response.ok) {
@@ -172,11 +185,17 @@ Never propose multiple steps, never include prose outside JSON.`;
       const parsed = JSON.parse(content);
       return sanitizeDecision(parsed);
     } catch {
-      return { action: 'stop', target: null, reason: 'Non-JSON decision returned' };
+      return {
+        action: 'stop',
+        target: null,
+        reason: `Non-JSON decision returned: ${content ? content.slice(0, 120) : 'empty response'}`,
+      };
     }
   } catch (error) {
     logger.error(`[fallback] Failed to get browsing decision: ${error}`);
     return { action: 'stop', target: null, reason: 'Decision service failed' };
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -185,12 +204,14 @@ export async function browseWithLLMFallback(options: FallbackBrowsingOptions): P
     sourceId,
     seedUrl,
     domainAllowlist,
-    maxPages = Number(process.env.FALLBACK_MAX_PAGES || 3),
-    maxClicks = Number(process.env.FALLBACK_MAX_CLICKS || 2),
-    maxDepth = Number(process.env.FALLBACK_MAX_DEPTH || 2),
-    timeoutMs = Number(process.env.FALLBACK_TIMEOUT_MS || 120000),
-    maxCandidates = Number(process.env.FALLBACK_MAX_CANDIDATES || 2),
+    maxPages = parsePositiveNumber(process.env.FALLBACK_MAX_PAGES, 3),
+    maxClicks = parsePositiveNumber(process.env.FALLBACK_MAX_CLICKS, 2),
+    maxDepth = parsePositiveNumber(process.env.FALLBACK_MAX_DEPTH, 2),
+    timeoutMs = parsePositiveNumber(process.env.FALLBACK_TIMEOUT_MS, 120000),
+    maxCandidates = parsePositiveNumber(process.env.FALLBACK_MAX_CANDIDATES, 2),
   } = options;
+  const navigationTimeout = parsePositiveNumber(process.env.FALLBACK_NAV_TIMEOUT_MS, 20000);
+  const fallbackUserAgent = process.env.FALLBACK_USER_AGENT || DEFAULT_FALLBACK_USER_AGENT;
 
   let browser: Browser | null = null;
   const visited = new Set<string>();
@@ -208,14 +229,18 @@ export async function browseWithLLMFallback(options: FallbackBrowsingOptions): P
       allowlist = [];
     }
   }
+  if (allowlist.length === 0) {
+    logger.warn(`[fallback][${sourceId}] No valid domain allowlist available. Aborting fallback browsing.`);
+    return [];
+  }
 
   try {
     browser = await chromium.launch({ headless: true });
     const context = await browser.newContext({
-      userAgent: 'Mozilla/5.0 (compatible; HNInsights/1.0; +http://example.com)',
+      userAgent: fallbackUserAgent,
       viewport: { width: 1280, height: 720 },
     });
-    await context.route('**/*.{png,jpg,jpeg,gif,webp,svg,css,woff,woff2,mp4,mp3}', route => route.abort());
+    await context.route(BLOCKED_RESOURCE_GLOB, route => route.abort());
 
     while (queue.length > 0) {
       if (Date.now() - startTime > timeoutMs) {
@@ -247,7 +272,7 @@ export async function browseWithLLMFallback(options: FallbackBrowsingOptions): P
 
       const page = await context.newPage();
       try {
-        await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 20000 });
+        await page.goto(url, { waitUntil: 'domcontentloaded', timeout: navigationTimeout });
         const snapshot = await captureSnapshot(page, url);
         const decision = await getBrowsingDecision(snapshot);
         logger.info(

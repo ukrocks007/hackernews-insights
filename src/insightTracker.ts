@@ -4,12 +4,20 @@ import { browseWithLLMFallback } from './fallbackBrowser';
 import logger from './logger';
 import { sendNotification, sendStoryNotification } from './notifier';
 import { MIN_HN_SCORE, checkRelevance } from './relevanceAgent';
-import { getSourceRegistry, NormalizedStoryCandidate, StructuredIngestOptions } from './sourceRegistry';
+import { ScrapedStory } from './hnScraper';
+import { getSourceRegistry, HACKERNEWS_SOURCE_ID, NormalizedStoryCandidate, StructuredIngestOptions } from './sourceRegistry';
 import { hasStoryBeenProcessed, StoryInput, saveStory, getUnsentRelevantStories, markStoryAsSent } from './storage';
 
 const MAX_HN_PAGES = 6; // 1 initial + 5 retries
 
-function toScrapedStory(candidate: NormalizedStoryCandidate) {
+function isBelowScoreThreshold(candidate: NormalizedStoryCandidate): boolean {
+  if (candidate.sourceId !== HACKERNEWS_SOURCE_ID) return false;
+  const score = candidate.score;
+  if (score === undefined || score === null) return false;
+  return score < MIN_HN_SCORE;
+}
+
+function toScrapedStory(candidate: NormalizedStoryCandidate): ScrapedStory {
   return {
     id: candidate.id,
     title: candidate.title,
@@ -26,7 +34,7 @@ async function processCandidate(candidate: NormalizedStoryCandidate): Promise<bo
     return false;
   }
 
-  if (candidate.sourceId === 'hackernews' && candidate.score !== undefined && candidate.score !== null && candidate.score < MIN_HN_SCORE) {
+  if (isBelowScoreThreshold(candidate)) {
     logger.info(`Pre-filter: Rejected "${candidate.title}" (Score ${candidate.score} < ${MIN_HN_SCORE})`);
     return false;
   }
@@ -129,7 +137,7 @@ async function fetchAndFilterStories() {
   for (const source of registry) {
     if (source.supportsStructuredIngest && source.structuredIngestor) {
       logger.info(`[ingestion] ${source.sourceId}: using structured ingestor (code-first).`);
-      if (source.sourceId === 'hackernews') {
+      if (source.sourceId === HACKERNEWS_SOURCE_ID) {
         totalRelevant += await runHackerNewsStructured(source.structuredIngestor);
       } else {
         const candidates = await source.structuredIngestor();

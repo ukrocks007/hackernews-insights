@@ -3,6 +3,8 @@ import { scrapeTopStories, ScrapedStory } from './hnScraper';
 import logger from './logger';
 import { ContentSignals } from './contentScraper';
 
+export const HACKERNEWS_SOURCE_ID = 'hackernews';
+
 export interface NormalizedStoryCandidate {
   id: number;
   title: string;
@@ -36,7 +38,7 @@ function normalizeHackerNewsStory(story: ScrapedStory): NormalizedStoryCandidate
     url: story.url,
     score: story.score,
     rank: story.rank,
-    sourceId: 'hackernews',
+    sourceId: HACKERNEWS_SOURCE_ID,
   };
 }
 
@@ -48,8 +50,9 @@ export async function ingestHackerNewsStructured(options?: StructuredIngestOptio
   return stories.map(normalizeHackerNewsStory);
 }
 
+// Uses the first 44 bits of a SHA-256 digest to stay within JS safe integer range while keeping IDs deterministic.
 export function deriveStoryIdFromUrl(url: string): number {
-  const hash = createHash('md5').update(url).digest('hex').slice(0, 8);
+  const hash = createHash('sha256').update(url).digest('hex').slice(0, 11);
   return parseInt(hash, 16);
 }
 
@@ -66,7 +69,7 @@ export function getSourceRegistry(): SourceCapability[] {
   const fallbackAllowlist = parseCsvEnv(process.env.FALLBACK_DOMAIN_ALLOWLIST);
 
   const hackerNews: SourceCapability = {
-    sourceId: 'hackernews',
+    sourceId: HACKERNEWS_SOURCE_ID,
     supportsStructuredIngest: true,
     structuredIngestor: ingestHackerNewsStructured,
     fallbackBrowsingAllowed: false,
