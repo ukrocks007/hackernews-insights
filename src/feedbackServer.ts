@@ -2,6 +2,9 @@ import http, { Server } from 'http';
 import { URL } from 'url';
 import { FeedbackAction, FeedbackConfidence, FeedbackSource, recordFeedbackEvent, toDisplayScore, verifyFeedbackSignature } from './feedback';
 import { disconnectPrisma, initPrisma } from './prismaClient';
+import { fetchAndFilterStories } from './insightTracker';
+// Track running state for fetchAndFilterStories
+let isFetchRunning = false;
 
 interface FeedbackServerOptions {
   port?: number;
@@ -58,52 +61,75 @@ export async function startFeedbackServer(options: FeedbackServerOptions = {}): 
         res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
       }
 
-      if (url.pathname !== '/api/feedback' || req.method !== 'GET') {
-        res.writeHead(404).end();
-        return;
-      }
+      // Feedback endpoint
+      if (url.pathname === '/api/feedback' && req.method === 'GET') {
+        // ...existing code...
+        const storyId = Number(url.searchParams.get('storyId'));
+        const action = (url.searchParams.get('action') || '') as FeedbackAction;
+        const confidence = (url.searchParams.get('confidence') || 'explicit') as FeedbackConfidence;
+        const source = (url.searchParams.get('source') || 'pushover') as FeedbackSource;
+        const timestamp = Number(url.searchParams.get('ts'));
+        const signature = url.searchParams.get('sig') || '';
 
-      const storyId = Number(url.searchParams.get('storyId'));
-      const action = (url.searchParams.get('action') || '') as FeedbackAction;
-      const confidence = (url.searchParams.get('confidence') || 'explicit') as FeedbackConfidence;
-      const source = (url.searchParams.get('source') || 'pushover') as FeedbackSource;
-      const timestamp = Number(url.searchParams.get('ts'));
-      const signature = url.searchParams.get('sig') || '';
+        if (!storyId || !action || !timestamp || !signature) {
+          res
+            .writeHead(400, { 'Content-Type': 'text/html' })
+            .end(renderResponse('This feedback link is invalid or missing data.'));
+          return;
+        }
 
-      if (!storyId || !action || !timestamp || !signature) {
+        const verified = verifyFeedbackSignature(storyId, action, confidence, source, timestamp, signature, ttlHours);
+        if (!verified) {
+          res
+            .writeHead(410, { 'Content-Type': 'text/html' })
+            .end(renderResponse('This feedback link has expired.'));
+          return;
+        }
+
+        const result = await recordFeedbackEvent({ storyId, action, confidence, source });
+        if (!result) {
+          res.writeHead(200, { 'Content-Type': 'text/html' }).end(renderResponse('Feedback received. Thank you!'));
+          return;
+        }
+
+        const scoreText = toDisplayScore(result.relevanceScore);
+        const suppressionText = result.suppressedUntil
+          ? `Temporarily snoozed until ${result.suppressedUntil.toLocaleString()}.`
+          : 'Story remains eligible for notifications.';
+
         res
-          .writeHead(400, { 'Content-Type': 'text/html' })
-          .end(renderResponse('This feedback link is invalid or missing data.'));
+          .writeHead(200, { 'Content-Type': 'text/html' })
+          .end(renderResponse(`Saved your feedback (${action}). Current score: ${scoreText}. ${suppressionText}`));
         return;
       }
 
-      const verified = verifyFeedbackSignature(storyId, action, confidence, source, timestamp, signature, ttlHours);
-      if (!verified) {
-        res
-          .writeHead(410, { 'Content-Type': 'text/html' })
-          .end(renderResponse('This feedback link has expired.'));
+      // Trigger fetch endpoint
+      if (url.pathname === '/api/trigger-fetch' && req.method === 'POST') {
+        if (isFetchRunning) {
+          res.writeHead(429, { 'Content-Type': 'application/json' }).end(JSON.stringify({ status: 'busy', message: 'Fetch already running.' }));
+          return;
+        }
+        isFetchRunning = true;
+        fetchAndFilterStories()
+          .then(() => {
+            res.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify({ status: 'ok', message: 'Fetch completed.' }));
+          })
+          .catch(error => {
+            res.writeHead(500, { 'Content-Type': 'application/json' }).end(JSON.stringify({ status: 'error', message: String(error) }));
+          })
+          .finally(() => {
+            isFetchRunning = false;
+          });
         return;
       }
 
-      const result = await recordFeedbackEvent({ storyId, action, confidence, source });
-      if (!result) {
-        res.writeHead(200, { 'Content-Type': 'text/html' }).end(renderResponse('Feedback received. Thank you!'));
-        return;
-      }
+      // Default: 404 for other endpoints
+      res.writeHead(404, { 'Content-Type': 'application/json' }).end(JSON.stringify({ status: 'not_found' }));
+      return;
 
-      const scoreText = toDisplayScore(result.relevanceScore);
-      const suppressionText = result.suppressedUntil
-        ? `Temporarily snoozed until ${result.suppressedUntil.toLocaleString()}.`
-        : 'Story remains eligible for notifications.';
-
-      res
-        .writeHead(200, { 'Content-Type': 'text/html' })
-        .end(renderResponse(`Saved your feedback (${action}). Current score: ${scoreText}. ${suppressionText}`));
     } catch (error) {
-      console.error('Feedback endpoint error', error);
-      res
-        .writeHead(500, { 'Content-Type': 'text/html' })
-        .end(renderResponse('We could not process your feedback right now. Please try again later.'));
+      console.error('Feedback server error', error);
+      res.writeHead(500, { 'Content-Type': 'application/json' }).end(JSON.stringify({ status: 'error', message: String(error) }));
     }
   });
 
