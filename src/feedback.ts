@@ -188,7 +188,7 @@ export function computeRelevanceScore(story: Story, feedbackEvents: FeedbackEven
     const hours = calculateSuppressionHours(roundedScore);
     suppressedUntil = new Date(Date.now() + hours * 60 * 60 * 1000);
     reasons.push(`Suppressed for ${hours}h due to low relevance (${toDisplayScore(roundedScore)})`);
-  } else if (roundedScore > 0 && suppressedUntil && suppressedUntil > new Date()) {
+  } else if (roundedScore > 0 && suppressedUntil !== null && suppressedUntil > new Date()) {
     // Clear suppression if score recovered
     suppressedUntil = null;
     reasons.push('Suppression cleared after positive feedback');
