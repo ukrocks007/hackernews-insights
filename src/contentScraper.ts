@@ -10,6 +10,11 @@ export interface ContentSignals {
   bodyText: string;
 }
 
+const MIN_TEXT_CHUNK_LENGTH = 40;
+const MIN_TRUNCATION_POSITION = 2000;
+// Allow a small buffer beyond MAX_CHARS before hard truncation to avoid mid-sentence cuts.
+const CONTENT_EXTRACTION_BUFFER_RATIO = 1.2;
+
 export async function scrapeStoryContent(url: string): Promise<ContentSignals | null> {
   // Skip PDF or non-web pages to save time
   if (url.match(/\.(pdf|png|jpg|mp4)$/i)) {
@@ -54,35 +59,43 @@ export async function scrapeStoryContent(url: string): Promise<ContentSignals | 
         .slice(0, 3);
     });
 
-    const bodyText = await page.evaluate(() => {
-      const MAX_CHARS = 8000;
-      const preferred = document.querySelector('article') || document.querySelector('main');
-      const root = preferred || document.body;
-      const blacklist = new Set(['SCRIPT', 'STYLE', 'NAV', 'FOOTER', 'HEADER', 'NOSCRIPT', 'FORM', 'ASIDE']);
+    const bodyText = await page.evaluate(
+      ({ MIN_TEXT_CHUNK_LENGTH, MIN_TRUNCATION_POSITION, CONTENT_EXTRACTION_BUFFER_RATIO }) => {
+        const MAX_CHARS = 8000;
+        const preferred = document.querySelector('article') || document.querySelector('main');
+        const root = preferred || document.body;
+        const blacklist = new Set(['SCRIPT', 'STYLE', 'NAV', 'FOOTER', 'HEADER', 'NOSCRIPT', 'FORM', 'ASIDE']);
 
       const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
         acceptNode(node) {
           const text = (node.textContent || '').trim();
-          if (!text || text.length < 40) return NodeFilter.FILTER_SKIP;
-          const parent = (node as any).parentElement;
+          if (!text || text.length < MIN_TEXT_CHUNK_LENGTH) return NodeFilter.FILTER_SKIP;
+          const parent = (node as Text).parentElement;
           if (parent && blacklist.has(parent.tagName)) return NodeFilter.FILTER_SKIP;
           return NodeFilter.FILTER_ACCEPT;
         }
       });
 
       const chunks: string[] = [];
+      let approxLength = 0;
       while (walker.nextNode()) {
         const text = (walker.currentNode.textContent || '').replace(/\s+/g, ' ').trim();
-        if (text) chunks.push(text);
-        if (chunks.join(' ').length > MAX_CHARS * 1.2) break; // soft stop to avoid extra work
+        if (text) {
+          chunks.push(text);
+          approxLength += text.length + 1;
+        }
+        if (approxLength > MAX_CHARS * CONTENT_EXTRACTION_BUFFER_RATIO) break; // soft stop to avoid extra work
       }
 
       const joined = chunks.join(' ');
       if (joined.length <= MAX_CHARS) return joined;
       const truncated = joined.slice(0, MAX_CHARS);
       const lastSpace = truncated.lastIndexOf(' ');
-      return truncated.slice(0, lastSpace > 2000 ? lastSpace : MAX_CHARS);
-    });
+      const safeCut = lastSpace > MIN_TRUNCATION_POSITION ? lastSpace : MAX_CHARS;
+      return truncated.slice(0, Math.max(safeCut, 0));
+      },
+      { MIN_TEXT_CHUNK_LENGTH, MIN_TRUNCATION_POSITION, CONTENT_EXTRACTION_BUFFER_RATIO }
+    );
 
     const hasCodeBlocks = await page.$('pre code, .highlight, .code') !== null;
 

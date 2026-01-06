@@ -31,6 +31,10 @@ const SUPPRESSION_HOURS_PER_POINT = 2;
 const TAG_ADJUSTMENT_FACTOR = 0.1;
 const SOURCE_ADJUSTMENT_FACTOR = 0.05;
 export const INITIAL_RELEVANCE_SCORE = 150;
+// Default contribution used when associating topics to new stories.
+export const DEFAULT_TOPIC_WEIGHT_RATIO = 0.3;
+const TOPIC_IMPLICIT_SCALE = 0.4;
+const TOPIC_EXPLICIT_SCALE = 0.7;
 
 export const FEEDBACK_ACTIONS: FeedbackAction[] = ['LIKE', 'DISLIKE', 'SAVE', 'OPENED', 'IGNORED'];
 
@@ -247,20 +251,17 @@ export async function recordFeedbackEvent(payload: FeedbackPayload): Promise<Rel
       },
     });
 
-    const actionWeights: Record<FeedbackAction, number> = {
-      LIKE: 1.0,
-      DISLIKE: -1.0,
-      SAVE: 1.2,
-      OPENED: 0.3,
-      IGNORED: -0.2,
-    };
-    const topicDelta = actionWeights[payload.action] ?? 0;
+    const weightMap = payload.confidence === 'implicit' ? IMPLICIT_WEIGHTS : EXPLICIT_WEIGHTS;
+    const topicDelta = weightMap[payload.action] ?? 0;
     if (topicDelta !== 0) {
-      const scaled = Math.round(topicDelta * SCORE_SCALE * (payload.confidence === 'implicit' ? 0.4 : 0.7));
+      const scaled = Math.round(
+        topicDelta * SCORE_SCALE * (payload.confidence === 'implicit' ? TOPIC_IMPLICIT_SCALE : TOPIC_EXPLICIT_SCALE)
+      );
       const links = await prisma.storyTopic.findMany({ where: { storyId: payload.storyId } });
-      for (const link of links) {
-        await prisma.topic.update({
-          where: { id: link.topicId },
+      const topicIds = links.map(link => link.topicId);
+      if (topicIds.length > 0) {
+        await prisma.topic.updateMany({
+          where: { id: { in: topicIds } },
           data: { score: { increment: scaled } },
         });
       }

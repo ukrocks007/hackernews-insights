@@ -2,14 +2,26 @@ import { ContentSignals } from './contentScraper';
 import logger from './logger';
 
 const STOP_WORDS = new Set([
-  'a','an','and','the','of','for','in','on','at','to','from','by','with','about','into','over','after','before','between','but','or','nor','so','yet','very','is','are','was','were','be','been','being','this','that','these','those','as','it','its','if','then','else','than','also','new','news','update'
+  'a', 'an', 'and', 'the', 'of', 'for', 'in', 'on', 'at', 'to',
+  'from', 'by', 'with', 'about', 'into', 'over', 'after', 'before',
+  'between', 'but', 'or', 'nor', 'so', 'yet', 'very', 'is', 'are',
+  'was', 'were', 'be', 'been', 'being', 'this', 'that', 'these',
+  'those', 'as', 'it', 'its', 'if', 'then', 'else', 'than', 'also',
+  'new', 'news', 'update'
 ]);
 
 const GENERIC_TERMS = new Set([
-  'tech','software','hardware','ai','ml','startup','news','story','article','release','tips','guide','tutorial','best','practices','developer','engineering','blog','post','update','api'
+  'tech', 'software', 'hardware', 'ai', 'ml', 'startup', 'news', 'story', 'article',
+  'release', 'tips', 'guide', 'tutorial', 'best', 'practices', 'developer', 'engineering',
+  'blog', 'post', 'update', 'api'
 ]);
 
-type TopicSource = 'title' | 'url' | 'content' | 'heading';
+// Limit the number of tokens considered from content to keep extraction deterministic and fast.
+const MAX_CONTENT_TOKENS = 60;
+const ESCAPE_REGEX = /[\/\\^$*+?.()|[\]{}-]/g;
+function escapeForRegex(input: string): string {
+  return input.replace(ESCAPE_REGEX, (match) => `\\${match}`);
+}
 
 export interface ExtractedTopics {
   candidates: string[];
@@ -29,7 +41,7 @@ function normalizeToken(token: string): string | null {
   if (STOP_WORDS.has(cleaned)) return null;
   if (GENERIC_TERMS.has(cleaned)) return null;
   const wordCount = cleaned.split(' ').length;
-  if (wordCount === 0 || wordCount > 3) return null;
+  if (wordCount > 3) return null;
   if (cleaned.length < 3) return null;
   return cleaned;
 }
@@ -88,11 +100,18 @@ function dedupeKeepOrder(topics: string[]): string[] {
   return result;
 }
 
+const regexCache = new Map<string, RegExp>();
+
 function countOccurrences(text: string, phrase: string): number {
   if (!text || !phrase) return 0;
-  const pattern = new RegExp(`\\b${phrase.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')}\\b`, 'g');
-  const matches = text.match(pattern);
-  return matches ? matches.length : 0;
+  let pattern = regexCache.get(phrase);
+  if (!pattern) {
+    const escaped = escapeForRegex(phrase);
+    pattern = new RegExp(`(?:^|[^\\w-])${escaped}(?=$|[^\\w-])`, 'gi');
+    regexCache.set(phrase, pattern);
+  }
+  const matches = text.matchAll(pattern);
+  return Array.from(matches).length;
 }
 
 function rankTopics(
@@ -150,7 +169,7 @@ export function extractTopics(
   }
 
   const derivedTokens = tokenize(contentText);
-  const derivedPhrases = buildPhrases(derivedTokens.slice(0, 60), 6);
+  const derivedPhrases = buildPhrases(derivedTokens.slice(0, MAX_CONTENT_TOKENS), 6);
   for (const phrase of derivedPhrases) {
     if (!stage1Candidates.includes(phrase) && !derived.includes(phrase) && countOccurrences(combinedText, phrase) > 1) {
       derived.push(phrase);

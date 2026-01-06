@@ -7,6 +7,20 @@ import { hasStoryBeenProcessed, StoryInput, saveStory, getUnsentRelevantStories,
 import { extractTopics } from "./topicExtractor";
 import logger from "./logger";
 
+const CONTENT_BASED_WEIGHT_RATIO = 0.3;
+const METADATA_WEIGHT_RATIO = 0.15;
+
+function buildFallbackContent(storyTitle: string): ContentSignals {
+  return {
+    pageTitle: storyTitle,
+    description: '',
+    headings: [],
+    paragraphs: [],
+    hasCodeBlocks: false,
+    bodyText: '',
+  };
+}
+
 async function fetchAndFilterStories() {
   let relevantStoriesFound = 0;
   let page = 1;
@@ -46,14 +60,7 @@ async function fetchAndFilterStories() {
       // Scrape Content
       console.log(`Fetching content for: "${story.title}"...`);
       const scrapedContent = await scrapeStoryContent(story.url);
-      const content: ContentSignals = scrapedContent ?? {
-        pageTitle: story.title,
-        description: '',
-        headings: [],
-        paragraphs: [],
-        hasCodeBlocks: false,
-        bodyText: '',
-      };
+      const content: ContentSignals = scrapedContent ?? buildFallbackContent(story.title);
 
       if (!scrapedContent) {
         logger.warn(`Content fetch failed for "${story.title}". Using title/URL only.`);
@@ -62,8 +69,10 @@ async function fetchAndFilterStories() {
       const topics = extractTopics(story.title, story.url, scrapedContent);
       const topicInputs: TopicInput[] = topics.finalTopics.map(name => ({
         name,
-        source: scrapedContent ? 'content' : 'title',
-        weight: scrapedContent ? Math.round(INITIAL_RELEVANCE_SCORE * 0.3) : Math.round(INITIAL_RELEVANCE_SCORE * 0.15),
+        source: scrapedContent ? 'content' : 'metadata',
+        weight: scrapedContent
+          ? Math.round(INITIAL_RELEVANCE_SCORE * CONTENT_BASED_WEIGHT_RATIO)
+          : Math.round(INITIAL_RELEVANCE_SCORE * METADATA_WEIGHT_RATIO),
       }));
       logger.info(
         `Topics for "${story.title}": ${topics.finalTopics.join(', ') || 'none'} (removed: ${topics.removed.join(', ') || 'none'}, added: ${topics.added.join(', ') || 'none'})`
