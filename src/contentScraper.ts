@@ -29,8 +29,8 @@ export async function scrapeStoryContent(url: string): Promise<ContentSignals | 
 
     const page = await context.newPage();
     
-    // Hard timeout 15s
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 15000 });
+    // Hard timeout 30s
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
     
     // Extract signals
     const pageTitle = await page.title();

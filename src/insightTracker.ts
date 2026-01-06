@@ -1,42 +1,11 @@
-import { initDB, closeDB, saveStory, hasStoryBeenProcessed, getUnsentRelevantStories, markStoryAsSent, StoryInput } from './storage';
-import { scrapeTopStories } from './hnScraper';
-import { checkRelevance, MIN_HN_SCORE } from './relevanceAgent';
-import { sendStoryNotification, sendErrorNotification, sendNotification } from './notifier';
-import { scrapeStoryContent } from './contentScraper';
-import { startFeedbackServer } from './feedbackServer';
-import { INITIAL_RELEVANCE_SCORE, toDisplayScore } from './feedback';
+import { scrapeStoryContent } from "./contentScraper";
+import { INITIAL_RELEVANCE_SCORE, toDisplayScore } from "./feedback";
+import { scrapeTopStories } from "./hnScraper";
+import { sendNotification, sendStoryNotification } from "./notifier";
+import { MIN_HN_SCORE, checkRelevance } from "./relevanceAgent";
+import { hasStoryBeenProcessed, StoryInput, saveStory, getUnsentRelevantStories, markStoryAsSent } from "./storage";
 
-async function main() {
-  try {
-    console.log('Starting HN Insights Agent...');
-    await initDB();
-    try {
-      await startFeedbackServer();
-    } catch (error) {
-      const reason = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
-      console.warn(
-        'Feedback server failed to start. Possible causes include the feedback port already being in use or missing configuration (e.g., environment variables). Continuing without feedback endpoint.',
-        '\nReason:',
-        reason,
-        '\nRaw error:',
-        error
-      );
-    }
-    // Do not auto-run fetchAndFilterStories here; it is triggered via endpoint
-  } catch (error: any) {
-    console.error('Fatal error in HN Insights Agent:', error);
-    await sendErrorNotification(error);
-    process.exit(1);
-  } finally {
-    await closeDB();
-    console.log('Done.');
-  }
-}
-
-main();
-
-// Exported for feedbackServer endpoint
-export async function fetchAndFilterStories() {
+async function fetchAndFilterStories() {
   let relevantStoriesFound = 0;
   let page = 1;
   const MAX_PAGES = 6; // 1 initial + 5 retries
@@ -139,3 +108,5 @@ export async function fetchAndFilterStories() {
     }
   }
 }
+
+export { fetchAndFilterStories };

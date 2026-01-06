@@ -52,24 +52,34 @@ curl -sSL https://raw.githubusercontent.com/ukrocks007/hackernews-insights/main/
     ```
 
 2.  **Configuration**:
-    - Copy `.env` example:
-      ```bash
-      cp .env.example .env
-      ```
-    - Edit `.env` with your details:
-      ```env
-      OLLAMA_BASE_URL=http://localhost:11434
-      OLLAMA_MODEL=functiongemma
-      PUSHOVER_USER_KEY=your_user_key
-      PUSHOVER_API_TOKEN=your_api_token
-      HEADLESS=true
-      ```
-    - Edit `config/interests.json` to define your topics of interest.
+- Copy `.env` example:
+  ```bash
+  cp .env.example .env
+  ```
+- Edit `.env` with your details:
+  ```env
+  OLLAMA_BASE_URL=http://localhost:11434
+  OLLAMA_MODEL=functiongemma
+  PUSHOVER_USER_KEY=your_user_key
+  PUSHOVER_API_TOKEN=your_api_token
+  FEEDBACK_SECRET=choose_a_long_random_string
+  FEEDBACK_BASE_URL=http://your-host:3000
+  FEEDBACK_PORT=3000
+  FEEDBACK_TTL_HOURS=36
+  HEADLESS=true
+  ```
+  - Edit `config/interests.json` to define your topics of interest.
+  - If you deploy the feedback endpoint, expose `FEEDBACK_BASE_URL` so that Pushover links resolve back to your device.
 
 3.  **Build**:
-    ```bash
-    npm run build
-    ```
+  ```bash
+  npm run build
+  ```
+
+4.  **Sync Database Schema (Prisma + SQLite)**:
+   ```bash
+   npm run prisma:deploy
+   ```
 
 ## Running Locally
 

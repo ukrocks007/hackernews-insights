@@ -5,24 +5,27 @@
   "main": "index.js",
   "bin": "dist/index.js",
   "scripts": {
-    "build": "tsc && test -f .env && cp .env dist/.env || echo 'No .env file, skipping copy'",
+    "build": "npm run prisma:generate && tsc && test -f .env && cp .env dist/.env || echo 'No .env file, skipping copy'",
     "package:pi": "npm run build && pkg . --targets node18-linux-arm64 --output bin/hackernews-insights-linux-arm64",
     "package:x64": "npm run build && pkg . --targets node18-linux-x64 --output bin/hackernews-insights-linux-x64",
     "package:mac": "npm run build && pkg . --targets node18-macos-arm64 --output bin/hackernews-insights-macos-arm64",
     "package:all": "npm run build && pkg . --targets node18-linux-arm64,node18-linux-x64 --out-path bin",
     "start": "node dist/index.js",
     "dev": "ts-node src/index.ts",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "prisma:generate": "prisma generate --schema prisma/schema.prisma",
+    "prisma:deploy": "prisma migrate deploy || prisma db push",
+    "postinstall": "prisma generate --schema prisma/schema.prisma"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
     "@types/node": "^25.0.3",
+    "@prisma/client": "^5.20.0",
     "dotenv": "^17.2.3",
     "playwright": "^1.57.0",
-    "sqlite": "^5.1.1",
-    "sqlite3": "^5.1.7",
+    "prisma": "^5.20.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3"
   },
@@ -32,7 +35,9 @@
   "pkg": {
     "scripts": "dist/**/*.js",
     "assets": [
-      "node_modules/sqlite3/lib/binding/**/*",
+      "prisma/schema.prisma",
+      "node_modules/.prisma/client/libquery_engine*",
+      "node_modules/.prisma/client/schema.prisma",
       "config/**/*"
     ],
     "targets": [
