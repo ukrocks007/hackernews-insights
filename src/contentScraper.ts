@@ -1,4 +1,5 @@
 import { chromium, Browser } from 'playwright';
+import logger from './logger';
 
 export interface ContentSignals {
   pageTitle: string;
@@ -11,7 +12,7 @@ export interface ContentSignals {
 export async function scrapeStoryContent(url: string): Promise<ContentSignals | null> {
   // Skip PDF or non-web pages to save time
   if (url.match(/\.(pdf|png|jpg|mp4)$/i)) {
-    console.log(`Skipping non-HTML URL: ${url}`);
+    logger.info(`Skipping non-HTML URL: ${url}`);
     return null;
   }
 
@@ -63,7 +64,7 @@ export async function scrapeStoryContent(url: string): Promise<ContentSignals | 
     };
 
   } catch (error) {
-    console.error(`Error scraping content for ${url}:`, error);
+    logger.error(`Error scraping content for ${url}: ${error}`);
     return null;
   } finally {
     if (browser) await browser.close();

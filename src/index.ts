@@ -3,10 +3,11 @@ import { scrapeTopStories } from './hnScraper';
 import { checkRelevance, MIN_HN_SCORE, MAX_RANK } from './relevanceAgent';
 import { sendStoryNotification, sendErrorNotification, sendNotification } from './notifier';
 import { scrapeStoryContent } from './contentScraper';
+import logger from './logger';
 
 async function main() {
   try {
-    console.log('Starting HN Insights Agent...');
+    logger.info('Starting HN Insights Agent...');
     
     // 1. Initialize Database
     await initDB();
@@ -16,14 +17,14 @@ async function main() {
     const MAX_PAGES = 6; // 1 initial + 5 retries
 
     while (relevantStoriesFound === 0 && page <= MAX_PAGES) {
-      console.log(`--- Processing Page ${page} ---`);
+      logger.info(`--- Processing Page ${page} ---`);
 
       // 2. Scrape Top Stories
       const scrapedStories = await scrapeTopStories(30, page);
-      console.log(`Scraped ${scrapedStories.length} stories from page ${page}.`);
+      logger.info(`Scraped ${scrapedStories.length} stories from page ${page}.`);
 
       if (scrapedStories.length === 0) {
-        console.log('No stories found on this page. Stopping.');
+        logger.info('No stories found on this page. Stopping.');
         break;
       }
 
@@ -32,7 +33,7 @@ async function main() {
         // Check if already processed to avoid duplicates and save LLM costs
         const isProcessed = await hasStoryBeenProcessed(story.id);
         if (isProcessed) {
-          console.log(`Story ${story.id} ("${story.title}") already processed. Skipping.`);
+          logger.info(`Story ${story.id} ("${story.title}") already processed. Skipping.`);
           continue;
         }
 
@@ -43,20 +44,20 @@ async function main() {
         // }
 
         if (story.score < MIN_HN_SCORE) {
-          console.log(`Pre-filter: Rejected "${story.title}" (Score ${story.score} < ${MIN_HN_SCORE})`);
+          logger.info(`Pre-filter: Rejected "${story.title}" (Score ${story.score} < ${MIN_HN_SCORE})`);
           continue;
         }
 
         // Scrape Content
-        console.log(`Fetching content for: "${story.title}"...`);
+        logger.info(`Fetching content for: "${story.title}"...`);
         const content = await scrapeStoryContent(story.url);
         
         if (!content) {
-          console.log(`Skipping "${story.title}" (Content fetch failed or skipped)`);
+          logger.info(`Skipping "${story.title}" (Content fetch failed or skipped)`);
           continue;
         }
 
-        console.log(`Checking relevance for: "${story.title}"...`);
+        logger.info(`Checking relevance for: "${story.title}"...`);
         const result = await checkRelevance(story, content);
 
         if (result) {

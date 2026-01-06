@@ -1,6 +1,7 @@
 import sqlite3 from 'sqlite3';
 import { open, Database } from 'sqlite';
 import path from 'path';
+import logger from './logger';
 
 export interface Story {
   id: number;
@@ -57,7 +58,7 @@ export async function initDB(): Promise<void> {
     await db.exec('ALTER TABLE stories ADD COLUMN notification_sent INTEGER DEFAULT 0');
   } catch (e) { /* Column likely exists */ }
   
-  console.log('Database initialized at', dbPath);
+  logger.info(`Database initialized at ${dbPath}`);
 }
 
 export async function saveStory(story: Story): Promise<void> {
