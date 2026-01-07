@@ -107,20 +107,23 @@ export async function startFeedbackServer(options: FeedbackServerOptions = {}): 
       // Trigger fetch endpoint
       if (url.pathname === '/api/trigger-fetch' && req.method === 'POST') {
         if (isFetchRunning) {
-          res.writeHead(429, { 'Content-Type': 'application/json' }).end(JSON.stringify({ status: 'busy', message: 'Fetch already running.' }));
+          res
+            .writeHead(429, { "Content-Type": "application/json" })
+            .end(
+              JSON.stringify({
+                status: "busy",
+                message: "Fetch already running.",
+              })
+            );
           return;
         }
         isFetchRunning = true;
-        fetchAndFilterStories()
-          .then(() => {
-            res.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify({ status: 'ok', message: 'Fetch completed.' }));
-          })
-          .catch(error => {
-            res.writeHead(500, { 'Content-Type': 'application/json' }).end(JSON.stringify({ status: 'error', message: String(error) }));
-          })
-          .finally(() => {
-            isFetchRunning = false;
-          });
+        fetchAndFilterStories().finally(() => {
+          isFetchRunning = false;
+        });
+        res
+          .writeHead(200, { "Content-Type": "application/json" })
+          .end(JSON.stringify({ status: "ok", message: "Fetch completed." }));
         return;
       }
 
