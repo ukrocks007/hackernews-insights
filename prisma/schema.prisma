@@ -8,7 +8,7 @@ datasource db {
 }
 
 model Story {
-  id               Int             @id
+  id               String          @id
   title            String
   url              String?
   score            Int?
@@ -30,7 +30,7 @@ model Story {
 
 model FeedbackEvent {
   id          String   @id @default(cuid())
-  storyId     Int      @map("story_id")
+  storyId     String   @map("story_id")
   action      String
   confidence  String
   source      String
@@ -54,7 +54,7 @@ model Topic {
 }
 
 model StoryTopic {
-  storyId  Int    @map("story_id")
+  storyId  String    @map("story_id")
   topicId  Int    @map("topic_id")
   source   String
   weight   Int    @default(0)

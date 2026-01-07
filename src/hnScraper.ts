@@ -5,7 +5,7 @@ import logger from './logger';
 dotenv.config();
 
 export interface ScrapedStory {
-  id: number;
+  id: number | string;
   title: string;
   url: string;
   score: number;

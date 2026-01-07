@@ -19,7 +19,7 @@ function isBelowScoreThreshold(candidate: NormalizedStoryCandidate): boolean {
 
 function toScrapedStory(candidate: NormalizedStoryCandidate): ScrapedStory {
   return {
-    id: candidate.id,
+    id: String(candidate.id),
     title: candidate.title,
     url: candidate.url,
     score: candidate.score ?? 0,
@@ -52,8 +52,16 @@ async function processCandidate(candidate: NormalizedStoryCandidate): Promise<bo
   if (result) {
     logger.info(`MATCH: ${candidate.title} - ${result.reason}`);
 
+    // Prefer the page's HTML title for Hackernoon items since tag-list titles
+    // can be identical to the URL slug. Use scraped `pageTitle` when present.
+    const pageTitle = content?.pageTitle;
+
     const fullStory: StoryInput = {
-      ...relevanceInput,
+      id: String(relevanceInput.id),
+      title: relevanceInput.title !== relevanceInput.url ? relevanceInput.title : pageTitle ?? relevanceInput.title,
+      url: relevanceInput.url,
+      score: relevanceInput.score,
+      rank: relevanceInput.rank,
       date: new Date().toISOString().split('T')[0], // YYYY-MM-DD
       reason: result.reason,
       relevanceScore: INITIAL_RELEVANCE_SCORE,
