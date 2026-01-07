@@ -121,6 +121,7 @@ async function extractContentFromPage(page: Page): Promise<ContentSignals> {
     headings: headings.map(h => h.slice(0, 100)),
     paragraphs: paragraphs.map(p => p.slice(0, 300)),
     hasCodeBlocks,
+    bodyText: paragraphs.join(' ').slice(0, 8000),
   };
 }
 

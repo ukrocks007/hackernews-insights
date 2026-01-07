@@ -53,7 +53,8 @@ export async function checkRelevance(story: ScrapedStory, content: ContentSignal
     `Description: ${content.description}`,
     `Headings: ${content.headings.join('; ')}`,
     `First Paragraphs: ${content.paragraphs.join('\n  ')}`,
-    `Has Code Blocks: ${content.hasCodeBlocks}`
+    `Has Code Blocks: ${content.hasCodeBlocks}`,
+    `Body Snippet: ${(content.bodyText || '').slice(0, 500)}`
   ].join('\n- ');
 
   const systemPrompt = `You are a relevance filter for Hacker News stories.

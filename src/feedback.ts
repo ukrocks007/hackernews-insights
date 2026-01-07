@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { FeedbackEvent, Story } from '@prisma/client';
 import { getPrismaClient } from './prismaClient';
+import logger from './logger';
 
 export type FeedbackAction = 'LIKE' | 'DISLIKE' | 'SAVE' | 'OPENED' | 'IGNORED';
 export type FeedbackConfidence = 'explicit' | 'implicit';
@@ -31,6 +32,10 @@ const SUPPRESSION_HOURS_PER_POINT = 2;
 const TAG_ADJUSTMENT_FACTOR = 0.1;
 const SOURCE_ADJUSTMENT_FACTOR = 0.05;
 export const INITIAL_RELEVANCE_SCORE = 150;
+// Default contribution used when associating topics to new stories.
+export const DEFAULT_TOPIC_WEIGHT_RATIO = 0.3;
+const TOPIC_IMPLICIT_SCALE = 0.4;
+const TOPIC_EXPLICIT_SCALE = 0.7;
 
 export const FEEDBACK_ACTIONS: FeedbackAction[] = ['LIKE', 'DISLIKE', 'SAVE', 'OPENED', 'IGNORED'];
 
@@ -121,7 +126,7 @@ export function verifyFeedbackSignature(
 function decayFactor(createdAt: Date): number {
   const rawHoursAgo = (Date.now() - createdAt.getTime()) / (1000 * 60 * 60);
   if (rawHoursAgo < 0) {
-    console.warn('decayFactor: createdAt is in the future', {
+    logger.warn('decayFactor: createdAt is in the future', {
       createdAt: createdAt.toISOString(),
       now: new Date().toISOString(),
     });
@@ -159,7 +164,7 @@ export function computeRelevanceScore(story: Story, feedbackEvents: FeedbackEven
           try {
             return new URL(normalizedUrl).hostname.replace(/^(www\.|m\.|mobile\.)/, '');
           } catch (secondError) {
-            console.warn(
+            logger.warn(
               `Invalid story URL '${story.url}' for domain extraction (story ${story.id}) after normalization:`,
               secondError,
             );
@@ -246,9 +251,25 @@ export async function recordFeedbackEvent(payload: FeedbackPayload): Promise<Rel
         suppressedUntil: computation.suppressedUntil ?? null,
       },
     });
+
+    const weightMap = payload.confidence === 'implicit' ? IMPLICIT_WEIGHTS : EXPLICIT_WEIGHTS;
+    const topicDelta = weightMap[payload.action] ?? 0;
+    if (topicDelta !== 0) {
+      const scaled = Math.round(
+        topicDelta * SCORE_SCALE * (payload.confidence === 'implicit' ? TOPIC_IMPLICIT_SCALE : TOPIC_EXPLICIT_SCALE)
+      );
+      const links = await prisma.storyTopic.findMany({ where: { storyId: payload.storyId } });
+      const topicIds = links.map(link => link.topicId);
+      if (topicIds.length > 0) {
+        await prisma.topic.updateMany({
+          where: { id: { in: topicIds } },
+          data: { score: { increment: scaled } },
+        });
+      }
+    }
     return computation;
   } catch (error) {
-    console.error('Failed to record feedback event', error);
+    logger.error('Failed to record feedback event', error);
     return null;
   }
 }
