@@ -5,7 +5,7 @@ import logger from './logger';
 
 export type FeedbackAction = 'LIKE' | 'DISLIKE' | 'SAVE' | 'OPENED' | 'IGNORED';
 export type FeedbackConfidence = 'explicit' | 'implicit';
-export type FeedbackSource = 'pushover' | 'system';
+export type FeedbackSource = 'pushover' | 'system' | 'dashboard';
 
 const EXPLICIT_WEIGHTS: Record<FeedbackAction, number> = {
   LIKE: 1.0,
