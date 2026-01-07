@@ -1,4 +1,4 @@
-import { scrapeStoryContent } from './contentScraper';
+import { scrapeStoryContent, ContentSignals } from './contentScraper';
 import { INITIAL_RELEVANCE_SCORE, toDisplayScore } from './feedback';
 import { browseWithLLMFallback } from './fallbackBrowser';
 import logger from './logger';
@@ -6,7 +6,22 @@ import { sendNotification, sendStoryNotification } from './notifier';
 import { MIN_HN_SCORE, checkRelevance } from './relevanceAgent';
 import { ScrapedStory } from './hnScraper';
 import { getSourceRegistry, HACKERNEWS_SOURCE_ID, NormalizedStoryCandidate, StructuredIngestOptions } from './sourceRegistry';
-import { hasStoryBeenProcessed, StoryInput, saveStory, getUnsentRelevantStories, markStoryAsSent } from './storage';
+import { hasStoryBeenProcessed, StoryInput, saveStory, getUnsentRelevantStories, markStoryAsSent, TopicInput } from './storage';
+import { extractTopics } from './topicExtractor';
+
+const CONTENT_BASED_WEIGHT_RATIO = 0.3;
+const METADATA_WEIGHT_RATIO = 0.15;
+
+function buildFallbackContent(storyTitle: string): ContentSignals {
+  return {
+    pageTitle: storyTitle,
+    description: '',
+    headings: [],
+    paragraphs: [],
+    hasCodeBlocks: false,
+    bodyText: '',
+  };
+}
 
 const MAX_HN_PAGES = 6; // 1 initial + 5 retries
 
