@@ -40,7 +40,7 @@ const TOPIC_EXPLICIT_SCALE = 0.7;
 export const FEEDBACK_ACTIONS: FeedbackAction[] = ['LIKE', 'DISLIKE', 'SAVE', 'OPENED', 'IGNORED'];
 
 export interface FeedbackPayload {
-  storyId: number;
+  storyId: string;
   action: FeedbackAction;
   confidence: FeedbackConfidence;
   source: FeedbackSource;
@@ -58,7 +58,7 @@ function getSecret(): string | null {
 }
 
 function buildSigningPayload(
-  storyId: number,
+  storyId: string,
   action: FeedbackAction,
   confidence: FeedbackConfidence,
   source: FeedbackSource,
@@ -68,7 +68,7 @@ function buildSigningPayload(
 }
 
 export function buildSignedFeedbackLink(
-  storyId: number,
+  storyId: string,
   action: FeedbackAction,
   baseUrl?: string,
   confidence: FeedbackConfidence = 'explicit',
@@ -98,7 +98,7 @@ export function buildSignedFeedbackLink(
 }
 
 export function verifyFeedbackSignature(
-  storyId: number,
+  storyId: string,
   action: FeedbackAction,
   confidence: FeedbackConfidence,
   source: FeedbackSource,

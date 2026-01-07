@@ -48,7 +48,7 @@ export async function sendNotification(message: string, title: string = 'HN Insi
   }
 }
 
-function feedbackLinks(storyId: number): string {
+function feedbackLinks(storyId: string): string {
   const actions: Array<{ label: string; action: 'LIKE' | 'DISLIKE' | 'SAVE' }> = [
     { label: '👍 Relevant', action: 'LIKE' },
     { label: '👎 Not relevant', action: 'DISLIKE' },
@@ -81,17 +81,6 @@ export async function sendStoryNotification(story: StoredStory): Promise<void> {
     feedbackLinks(story.id);
 
   await sendNotification(message, 'HN Insight');
-}
-
-export async function sendDailySummary(stories: StoredStory[]): Promise<void> {
-  // Deprecated in favor of individual notifications, but kept for compatibility if needed
-  if (stories.length === 0) return;
-  
-  for (const story of stories) {
-    await sendStoryNotification(story);
-    // Small delay to prevent rate limiting
-    await new Promise(resolve => setTimeout(resolve, 500));
-  }
 }
 
 export async function sendErrorNotification(error: Error): Promise<void> {

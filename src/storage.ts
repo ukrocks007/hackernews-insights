@@ -6,7 +6,7 @@ import logger from './logger';
 export type StoredStory = Story;
 
 export interface StoryInput {
-  id: number;
+  id: string;
   title: string;
   url?: string | null;
   score?: number | null;
@@ -44,7 +44,7 @@ function normalizeTopicName(topic: string): string {
   return topic.trim().toLowerCase();
 }
 
-async function persistTopicsForStory(storyId: number, topics: TopicInput[]): Promise<void> {
+async function persistTopicsForStory(storyId: string, topics: TopicInput[]): Promise<void> {
   if (!topics.length) return;
   const prisma = getPrismaClient();
 
@@ -175,7 +175,7 @@ export async function getUnsentRelevantStories(): Promise<Story[]> {
   return normalized;
 }
 
-export async function markStoryAsSent(id: number): Promise<void> {
+export async function markStoryAsSent(id: string): Promise<void> {
   const prisma = getPrismaClient();
   await prisma.story.update({
     where: { id },
@@ -183,7 +183,7 @@ export async function markStoryAsSent(id: number): Promise<void> {
   });
 }
 
-export async function hasStoryBeenProcessed(id: number): Promise<boolean> {
+export async function hasStoryBeenProcessed(id: string): Promise<boolean> {
   const prisma = getPrismaClient();
   const result = await prisma.story.findUnique({ where: { id } });
   return !!result;

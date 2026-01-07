@@ -65,7 +65,7 @@ export async function startFeedbackServer(options: FeedbackServerOptions = {}): 
       // Feedback endpoint
       if (url.pathname === '/api/feedback' && req.method === 'GET') {
         // ...existing code...
-        const storyId = Number(url.searchParams.get('storyId'));
+        const storyId = url.searchParams.get('storyId') || '';
         const action = (url.searchParams.get('action') || '') as FeedbackAction;
         const confidence = (url.searchParams.get('confidence') || 'explicit') as FeedbackConfidence;
         const source = (url.searchParams.get('source') || 'pushover') as FeedbackSource;
@@ -78,7 +78,6 @@ export async function startFeedbackServer(options: FeedbackServerOptions = {}): 
             .end(renderResponse('This feedback link is invalid or missing data.'));
           return;
         }
-
         const verified = verifyFeedbackSignature(storyId, action, confidence, source, timestamp, signature, ttlHours);
         if (!verified) {
           res
