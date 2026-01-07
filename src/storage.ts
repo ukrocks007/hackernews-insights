@@ -1,6 +1,7 @@
 import { FeedbackEvent, Story } from '@prisma/client';
-import { computeRelevanceScore, SCORE_SCALE } from './feedback';
+import { computeRelevanceScore, DEFAULT_TOPIC_WEIGHT_RATIO, SCORE_SCALE } from './feedback';
 import { disconnectPrisma, getPrismaClient, initPrisma } from './prismaClient';
+import logger from './logger';
 
 export type StoredStory = Story;
 
@@ -16,14 +17,70 @@ export interface StoryInput {
   notificationSent?: boolean;
 }
 
+export interface TopicInput {
+  name: string;
+  source: 'title' | 'content' | 'metadata';
+  weight?: number;
+}
+
 // New stories start at SCORE_SCALE (represents a baseline relevance of 1.0)
 const DEFAULT_RELEVANCE_SCORE = SCORE_SCALE;
+const UNIQUE_CONSTRAINT_ERROR = 'P2002';
+const ALLOWED_TOPIC_SOURCES = new Set(['title', 'content', 'metadata']);
+
+function getErrorCode(error: unknown): string | null {
+  if (typeof error === 'object' && error && 'code' in error) {
+    const withCode = error as { code?: unknown };
+    return typeof withCode.code === 'string' ? withCode.code : null;
+  }
+  return null;
+}
 
 export async function initDB(): Promise<void> {
   await initPrisma();
 }
 
-export async function saveStory(story: StoryInput): Promise<void> {
+function normalizeTopicName(topic: string): string {
+  return topic.trim().toLowerCase();
+}
+
+async function persistTopicsForStory(storyId: number, topics: TopicInput[]): Promise<void> {
+  if (!topics.length) return;
+  const prisma = getPrismaClient();
+
+  for (const topic of topics) {
+    const name = normalizeTopicName(topic.name);
+    if (!name) continue;
+
+    const weight = topic.weight ?? Math.round(SCORE_SCALE * DEFAULT_TOPIC_WEIGHT_RATIO);
+    const source = ALLOWED_TOPIC_SOURCES.has(topic.source) ? topic.source : 'metadata';
+    const topicRecord = await prisma.topic.upsert({
+      where: { name },
+      update: { score: { increment: weight } },
+      create: { name, score: weight },
+    });
+
+    try {
+      await prisma.storyTopic.create({
+        data: {
+          storyId,
+          topicId: topicRecord.id,
+          source,
+          weight,
+        },
+      });
+    } catch (error: unknown) {
+      const code = getErrorCode(error);
+      if (code !== UNIQUE_CONSTRAINT_ERROR) {
+        logger.error(`Unexpected error while saving story topic for ${storyId}/${name}: ${error}`);
+        throw error;
+      }
+      logger.info(`Duplicate story-topic link ignored for ${storyId}/${name}`);
+    }
+  }
+}
+
+export async function saveStory(story: StoryInput, topics: TopicInput[] = []): Promise<void> {
   const prisma = getPrismaClient();
   try {
     await prisma.story.create({
@@ -39,12 +96,14 @@ export async function saveStory(story: StoryInput): Promise<void> {
         notificationSent: story.notificationSent ?? false,
       },
     });
-  } catch (error: any) {
-    if (error?.code === 'P2002') {
+    await persistTopicsForStory(story.id, topics);
+  } catch (error: unknown) {
+    const code = getErrorCode(error);
+    if (code === UNIQUE_CONSTRAINT_ERROR) {
       // Duplicate, ignore to preserve INSERT OR IGNORE semantics
       return;
     }
-    console.error('Unexpected error while saving story', { storyId: story.id, error });
+    logger.error(`Unexpected error while saving story ${story.id}: ${error}`);
     throw error;
   }
 }
@@ -68,10 +127,10 @@ async function refreshRelevance(story: Story & { feedbackEvents: FeedbackEvent[]
     currentSuppression !== nextSuppression
   ) {
     if (computation.suppressedUntil && !story.suppressedUntil) {
-      console.log(`Story ${story.id} temporarily suppressed until ${computation.suppressedUntil.toISOString()}`);
+      logger.info(`Story ${story.id} temporarily suppressed until ${computation.suppressedUntil.toISOString()}`);
     }
     if (!computation.suppressedUntil && story.suppressedUntil) {
-      console.log(`Story ${story.id} suppression cleared after feedback recovery`);
+      logger.info(`Story ${story.id} suppression cleared after feedback recovery`);
     }
     const updated = await prisma.story.update({
       where: { id: story.id },
