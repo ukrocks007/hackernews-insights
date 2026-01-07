@@ -6,16 +6,16 @@ class Logger {
     return new Date().toLocaleString(); // Human-readable timestamp
   }
 
-  info(message: string) {
-    console.log(`[INFO] [${this.getTimestamp()}] ${message}`);
+  info(message: string, ...data: any[]) {
+    console.log(`[INFO] [${this.getTimestamp()}] ${message}`, ...data);
   }
 
-  warn(message: string) {
-    console.warn(`[WARN] [${this.getTimestamp()}] ${message}`);
+  warn(message: string, ...data: any[]) {
+    console.warn(`[WARN] [${this.getTimestamp()}] ${message}`, ...data);
   }
 
-  error(message: string) {
-    console.error(`[ERROR] [${this.getTimestamp()}] ${message}`);
+  error(message: string, ...data: any[]) {
+    console.error(`[ERROR] [${this.getTimestamp()}] ${message}`, ...data);
   }
 }
 

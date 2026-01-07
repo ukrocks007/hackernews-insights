@@ -27,14 +27,14 @@ async function fetchAndFilterStories() {
   const MAX_PAGES = 6; // 1 initial + 5 retries
 
   while (relevantStoriesFound === 0 && page <= MAX_PAGES) {
-    console.log(`--- Processing Page ${page} ---`);
+    logger.info(`--- Processing Page ${page} ---`);
 
     // 2. Scrape Top Stories
     const scrapedStories = await scrapeTopStories(30, page);
-    console.log(`Scraped ${scrapedStories.length} stories from page ${page}.`);
+    logger.info(`Scraped ${scrapedStories.length} stories from page ${page}.`);
 
     if (scrapedStories.length === 0) {
-      console.log('No stories found on this page. Stopping.');
+      logger.info('No stories found on this page. Stopping.');
       break;
     }
 
@@ -43,22 +43,22 @@ async function fetchAndFilterStories() {
       // Check if already processed to avoid duplicates and save LLM costs
       const isProcessed = await hasStoryBeenProcessed(story.id);
       if (isProcessed) {
-        console.log(`Story ${story.id} ("${story.title}") already processed. Skipping.`);
+        logger.info(`Story ${story.id} ("${story.title}") already processed. Skipping.`);
         continue;
       }
 
       // Deterministic Pre-filtering
       // if (story.rank > MAX_RANK) {
-      //   console.log(`Pre-filter: Rejected "${story.title}" (Rank ${story.rank} > ${MAX_RANK})`);
+      //   logger.info(`Pre-filter: Rejected "${story.title}" (Rank ${story.rank} > ${MAX_RANK})`);
       //   continue;
       // }
       if (story.score < MIN_HN_SCORE) {
-        console.log(`Pre-filter: Rejected "${story.title}" (Score ${story.score} < ${MIN_HN_SCORE})`);
+        logger.info(`Pre-filter: Rejected "${story.title}" (Score ${story.score} < ${MIN_HN_SCORE})`);
         continue;
       }
 
       // Scrape Content
-      console.log(`Fetching content for: "${story.title}"...`);
+      logger.info(`Fetching content for: "${story.title}"...`);
       const scrapedContent = await scrapeStoryContent(story.url);
       const content: ContentSignals = scrapedContent ?? buildFallbackContent(story.title);
 
@@ -78,11 +78,11 @@ async function fetchAndFilterStories() {
         `Topics for "${story.title}": ${topics.finalTopics.join(', ') || 'none'} (removed: ${topics.removed.join(', ') || 'none'}, added: ${topics.added.join(', ') || 'none'})`
       );
 
-      console.log(`Checking relevance for: "${story.title}"...`);
+      logger.info(`Checking relevance for: "${story.title}"...`);
       const result = await checkRelevance(story, content);
 
       if (result) {
-        console.log(`MATCH: ${story.title} - ${result.reason}`);
+        logger.info(`MATCH: ${story.title} - ${result.reason}`);
 
         const fullStory: StoryInput = {
           ...story,
@@ -95,38 +95,38 @@ async function fetchAndFilterStories() {
         await saveStory(fullStory, topicInputs);
         relevantStoriesFound++;
       } else {
-        console.log(`IGNORE: ${story.title}`);
+        logger.info(`IGNORE: ${story.title}`);
       }
     }
 
     if (relevantStoriesFound > 0) {
-      console.log(`Found ${relevantStoriesFound} relevant stories. Stopping pagination.`);
+      logger.info(`Found ${relevantStoriesFound} relevant stories. Stopping pagination.`);
       break;
     }
 
     page++;
     if (page <= MAX_PAGES) {
-      console.log('No relevant stories found yet. Moving to next page...');
+      logger.info('No relevant stories found yet. Moving to next page...');
       await new Promise(resolve => setTimeout(resolve, 2000));
     }
   }
 
   // 4. Select Top 5 Unsent Stories (from today and past)
   const unsentStories = await getUnsentRelevantStories();
-  console.log(`Total unsent relevant stories in pool: ${unsentStories.length}`);
+  logger.info(`Total unsent relevant stories in pool: ${unsentStories.length}`);
 
   if (unsentStories.length === 0) {
-    console.log('No relevant stories to send.');
+    logger.info('No relevant stories to send.');
     await sendNotification('No strong HN signals today.', 'HN Insights - Empty');
   } else {
     // Sort by relevance score (desc), then HN score (desc)
     // Note: SQL query already does this, but good to be explicit if logic changes
     const topStories = unsentStories.slice(0, 5);
 
-    console.log(`Sending notifications for top ${topStories.length} stories...`);
+    logger.info(`Sending notifications for top ${topStories.length} stories...`);
 
     for (const story of topStories) {
-      console.log(
+      logger.info(
         `Selected "${story.title}" (Relevance ${toDisplayScore(story.relevanceScore)}; Score ${story.score}); reason=${story.reason ?? 'N/A'}`
       );
       await sendStoryNotification(story);

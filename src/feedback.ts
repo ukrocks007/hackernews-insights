@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { FeedbackEvent, Story } from '@prisma/client';
 import { getPrismaClient } from './prismaClient';
+import logger from './logger';
 
 export type FeedbackAction = 'LIKE' | 'DISLIKE' | 'SAVE' | 'OPENED' | 'IGNORED';
 export type FeedbackConfidence = 'explicit' | 'implicit';
@@ -125,7 +126,7 @@ export function verifyFeedbackSignature(
 function decayFactor(createdAt: Date): number {
   const rawHoursAgo = (Date.now() - createdAt.getTime()) / (1000 * 60 * 60);
   if (rawHoursAgo < 0) {
-    console.warn('decayFactor: createdAt is in the future', {
+    logger.warn('decayFactor: createdAt is in the future', {
       createdAt: createdAt.toISOString(),
       now: new Date().toISOString(),
     });
@@ -163,7 +164,7 @@ export function computeRelevanceScore(story: Story, feedbackEvents: FeedbackEven
           try {
             return new URL(normalizedUrl).hostname.replace(/^(www\.|m\.|mobile\.)/, '');
           } catch (secondError) {
-            console.warn(
+            logger.warn(
               `Invalid story URL '${story.url}' for domain extraction (story ${story.id}) after normalization:`,
               secondError,
             );
@@ -268,7 +269,7 @@ export async function recordFeedbackEvent(payload: FeedbackPayload): Promise<Rel
     }
     return computation;
   } catch (error) {
-    console.error('Failed to record feedback event', error);
+    logger.error('Failed to record feedback event', error);
     return null;
   }
 }

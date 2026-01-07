@@ -127,10 +127,10 @@ async function refreshRelevance(story: Story & { feedbackEvents: FeedbackEvent[]
     currentSuppression !== nextSuppression
   ) {
     if (computation.suppressedUntil && !story.suppressedUntil) {
-      console.log(`Story ${story.id} temporarily suppressed until ${computation.suppressedUntil.toISOString()}`);
+      logger.info(`Story ${story.id} temporarily suppressed until ${computation.suppressedUntil.toISOString()}`);
     }
     if (!computation.suppressedUntil && story.suppressedUntil) {
-      console.log(`Story ${story.id} suppression cleared after feedback recovery`);
+      logger.info(`Story ${story.id} suppression cleared after feedback recovery`);
     }
     const updated = await prisma.story.update({
       where: { id: story.id },

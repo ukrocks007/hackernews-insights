@@ -60,7 +60,7 @@ function feedbackLinks(storyId: number): string {
       const url = buildSignedFeedbackLink(storyId, action);
       if (!url) {
         if (!warnedMissingSecret) {
-          console.warn('Feedback secret is missing; feedback links will be skipped.');
+          logger.warn('Feedback secret is missing; feedback links will be skipped.');
           warnedMissingSecret = true;
         }
         return null;

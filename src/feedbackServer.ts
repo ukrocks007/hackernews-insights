@@ -3,6 +3,7 @@ import { URL } from 'url';
 import { FeedbackAction, FeedbackConfidence, FeedbackSource, recordFeedbackEvent, toDisplayScore, verifyFeedbackSignature } from './feedback';
 import { disconnectPrisma, initPrisma } from './prismaClient';
 import { fetchAndFilterStories } from './insightTracker';
+import logger from './logger';
 // Track running state for fetchAndFilterStories
 let isFetchRunning = false;
 
@@ -128,21 +129,21 @@ export async function startFeedbackServer(options: FeedbackServerOptions = {}): 
       return;
 
     } catch (error) {
-      console.error('Feedback server error', error);
+      logger.error('Feedback server error', error);
       res.writeHead(500, { 'Content-Type': 'application/json' }).end(JSON.stringify({ status: 'error', message: String(error) }));
     }
   });
 
   server.listen(port, host, () => {
-    console.log(`Feedback server listening on http://${host}:${port}`);
+    logger.info(`Feedback server listening on http://${host}:${port}`);
   });
 
   if (serverTtlHours > 0) {
     const shutdownTimer = setTimeout(() => {
-      console.log(`Shutting down feedback server after ${serverTtlHours}h window.`);
+      logger.info(`Shutting down feedback server after ${serverTtlHours}h window.`);
       server.close();
       disconnectPrisma().catch(error => {
-        console.error('Failed to disconnect Prisma during feedback server shutdown', error);
+        logger.error('Failed to disconnect Prisma during feedback server shutdown', error);
       });
     }, serverTtlHours * 60 * 60 * 1000);
     shutdownTimer.unref();
