@@ -24,7 +24,7 @@ export async function scrapeStoryContent(url: string): Promise<ContentSignals | 
 
   let browser: Browser | null = null;
   try {
-    browser = await chromium.launch({ headless: true });
+    browser = await chromium.launch({ headless: process.env.HEADLESS !== 'false' });
     const context = await browser.newContext({
       userAgent: 'Mozilla/5.0 (compatible; HNInsights/1.0; +http://example.com)',
       viewport: { width: 1280, height: 720 }

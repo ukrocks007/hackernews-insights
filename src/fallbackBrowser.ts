@@ -236,7 +236,7 @@ export async function browseWithLLMFallback(options: FallbackBrowsingOptions): P
   }
 
   try {
-    browser = await chromium.launch({ headless: true });
+    browser = await chromium.launch({ headless: process.env.HEADLESS !== 'false' });
     const context = await browser.newContext({
       userAgent: fallbackUserAgent,
       viewport: { width: 1280, height: 720 },
