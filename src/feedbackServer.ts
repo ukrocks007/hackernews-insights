@@ -3,7 +3,9 @@ import { URL } from 'url';
 import { FeedbackAction, FeedbackConfidence, FeedbackSource, recordFeedbackEvent, toDisplayScore, verifyFeedbackSignature } from './feedback';
 import { disconnectPrisma, initPrisma } from './prismaClient';
 import { fetchAndFilterStories } from './insightTracker';
+import { getStoriesPaginated, renderHomePage, renderResponse } from './dashboard';
 import logger from './logger';
+
 // Track running state for fetchAndFilterStories
 let isFetchRunning = false;
 
@@ -11,29 +13,6 @@ interface FeedbackServerOptions {
   port?: number;
   host?: string;
   ttlHours?: number;
-}
-
-function renderResponse(message: string): string {
-  return `<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>HN Insights</title>
-  <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 24px; background:#f9fafb; color:#111827; }
-    .card { max-width: 420px; margin: 0 auto; background:#fff; border-radius: 12px; padding: 20px; box-shadow: 0 6px 18px rgba(0,0,0,0.08); }
-    h1 { font-size: 20px; margin: 0 0 8px 0; }
-    p { margin: 0; line-height: 1.5; }
-  </style>
-</head>
-<body>
-  <div class="card">
-    <h1>HN Insights</h1>
-    <p>${message}</p>
-  </div>
-</body>
-</html>`;
 }
 
 export async function startFeedbackServer(options: FeedbackServerOptions = {}): Promise<Server | null> {
@@ -60,6 +39,50 @@ export async function startFeedbackServer(options: FeedbackServerOptions = {}): 
       const allowedOrigin = process.env.FEEDBACK_ALLOW_ORIGIN || '*';
       if (allowedOrigin) {
         res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
+      }
+
+      // Home page - Dashboard
+      if ((url.pathname === '/' || url.pathname === '') && req.method === 'GET') {
+        const page = Math.max(1, parseInt(url.searchParams.get('page') || '1', 10));
+        const limit = Math.min(100, Math.max(1, parseInt(url.searchParams.get('limit') || '20', 10)));
+        const notificationSentParam = url.searchParams.get('notificationSent');
+        const search = url.searchParams.get('search') || '';
+        const sortBy = (url.searchParams.get('sortBy') || 'firstSeenAt') as 'date' | 'score' | 'relevanceScore' | 'firstSeenAt';
+        const sortOrder = (url.searchParams.get('sortOrder') || 'desc') as 'asc' | 'desc';
+
+        let notificationSent: boolean | null = null;
+        if (notificationSentParam === 'true') notificationSent = true;
+        else if (notificationSentParam === 'false') notificationSent = false;
+
+        const data = await getStoriesPaginated({ page, limit, notificationSent, search, sortBy, sortOrder });
+
+        res.writeHead(200, { 'Content-Type': 'text/html' }).end(
+          renderHomePage(data, {
+            notificationSent: notificationSentParam || '',
+            search,
+            sortBy,
+            sortOrder,
+          })
+        );
+        return;
+      }
+
+      // API endpoint to get stories as JSON
+      if (url.pathname === '/api/stories' && req.method === 'GET') {
+        const page = Math.max(1, parseInt(url.searchParams.get('page') || '1', 10));
+        const limit = Math.min(100, Math.max(1, parseInt(url.searchParams.get('limit') || '20', 10)));
+        const notificationSentParam = url.searchParams.get('notificationSent');
+        const search = url.searchParams.get('search') || '';
+        const sortBy = (url.searchParams.get('sortBy') || 'firstSeenAt') as 'date' | 'score' | 'relevanceScore' | 'firstSeenAt';
+        const sortOrder = (url.searchParams.get('sortOrder') || 'desc') as 'asc' | 'desc';
+
+        let notificationSent: boolean | null = null;
+        if (notificationSentParam === 'true') notificationSent = true;
+        else if (notificationSentParam === 'false') notificationSent = false;
+
+        const data = await getStoriesPaginated({ page, limit, notificationSent, search, sortBy, sortOrder });
+        res.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify(data));
+        return;
       }
 
       // Feedback endpoint
@@ -123,6 +146,56 @@ export async function startFeedbackServer(options: FeedbackServerOptions = {}): 
         res
           .writeHead(200, { "Content-Type": "application/json" })
           .end(JSON.stringify({ status: "ok", message: "Fetch completed." }));
+        return;
+      }
+
+      // Submit feedback endpoint (from dashboard)
+      if (url.pathname === '/api/submit-feedback' && req.method === 'POST') {
+        let body = '';
+        req.on('data', (chunk) => {
+          body += chunk.toString();
+        });
+        req.on('end', async () => {
+          try {
+            const { storyId, action } = JSON.parse(body);
+            if (!storyId || !action) {
+              res
+                .writeHead(400, { 'Content-Type': 'application/json' })
+                .end(JSON.stringify({ status: 'error', message: 'Missing storyId or action' }));
+              return;
+            }
+
+            const result = await recordFeedbackEvent({
+              storyId,
+              action: action as FeedbackAction,
+              confidence: 'explicit',
+              source: 'dashboard',
+            });
+
+            if (!result) {
+              res
+                .writeHead(200, { 'Content-Type': 'application/json' })
+                .end(JSON.stringify({ status: 'ok', message: 'Feedback recorded' }));
+              return;
+            }
+
+            res
+              .writeHead(200, { 'Content-Type': 'application/json' })
+              .end(
+                JSON.stringify({
+                  status: 'ok',
+                  message: 'Feedback saved',
+                  relevanceScore: result.relevanceScore,
+                  suppressedUntil: result.suppressedUntil,
+                })
+              );
+          } catch (error) {
+            logger.error('Error processing feedback submission', error);
+            res
+              .writeHead(500, { 'Content-Type': 'application/json' })
+              .end(JSON.stringify({ status: 'error', message: String(error) }));
+          }
+        });
         return;
       }
 
