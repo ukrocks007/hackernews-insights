@@ -67,6 +67,8 @@ function parseCsvEnv(value: string | undefined): string[] {
 export function getSourceRegistry(): SourceCapability[] {
   const fallbackSeeds = parseCsvEnv(process.env.FALLBACK_SEED_URLS);
   const fallbackAllowlist = parseCsvEnv(process.env.FALLBACK_DOMAIN_ALLOWLIST);
+  const hackernoonSeeds = parseCsvEnv(process.env.HACKERNOON_SEED_URLS);
+  const hackernoonAllowlist = parseCsvEnv(process.env.HACKERNOON_DOMAIN_ALLOWLIST);
 
   const hackerNews: SourceCapability = {
     sourceId: HACKERNEWS_SOURCE_ID,
@@ -84,5 +86,13 @@ export function getSourceRegistry(): SourceCapability[] {
     seedUrls: fallbackSeeds,
   };
 
-  return [hackerNews, fallbackBrowsing];
+  const hackernoon: SourceCapability = {
+    sourceId: 'hackernoon',
+    supportsStructuredIngest: false,
+    fallbackBrowsingAllowed: true,
+    domainAllowlist: hackernoonAllowlist.length ? hackernoonAllowlist : ['hackernoon.com'],
+    seedUrls: hackernoonSeeds.length ? hackernoonSeeds : ['https://hackernoon.com/'],
+  };
+
+  return [hackerNews, hackernoon, fallbackBrowsing];
 }
