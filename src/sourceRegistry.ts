@@ -2,11 +2,14 @@ import { createHash } from 'crypto';
 import { scrapeTopStories, ScrapedStory } from './hnScraper';
 import { scrapeTaggedStories } from './hackernoonScraper';
 import { scrapeGithubBlogPosts, GithubBlogItem } from './githubBlogScraper';
+import { scrapeSubstackArchive, SubstackItem } from './substackScraper';
+import { scrapeAddyOsmaniBlog, AddyOsmaniBlogItem } from './addyOsmaniBlogScraper';
 import logger from './logger';
 import { ContentSignals } from './contentScraper';
 
 export const HACKERNEWS_SOURCE_ID = 'hackernews';
 export const GITHUB_BLOG_SOURCE_ID = 'github_blog';
+export const ADDY_OSMANI_BLOG_SOURCE_ID = 'addy_osmani_blog';
 
 export interface NormalizedStoryCandidate {
   id: string;
@@ -101,6 +104,70 @@ export async function ingestGithubBlogStructured(options?: StructuredIngestOptio
   return items.map(normalizeGithubBlogItem);
 }
 
+function normalizeSubstackItem(item: SubstackItem, username: string): NormalizedStoryCandidate {
+  const description = item.excerpt ?? '';
+  const fallbackContent: ContentSignals = {
+    pageTitle: item.title,
+    description,
+    headings: [],
+    paragraphs: description ? [description] : [],
+    hasCodeBlocks: false,
+    bodyText: description,
+  };
+
+  return {
+    id: deriveStoryIdFromUrl(item.url, `substack_${username}`),
+    title: item.title,
+    url: item.url,
+    sourceId: `substack:${username}`,
+    date: item.date ?? null,
+    content: fallbackContent,
+  };
+}
+
+/**
+ * Creates a generic Substack ingestor for a given username.
+ * This allows multiple Substack authors to be configured without new code.
+ */
+export function createSubstackIngestor(username: string): StructuredIngestor {
+  return async (options?: StructuredIngestOptions): Promise<NormalizedStoryCandidate[]> => {
+    const limit = options?.limit ?? 30;
+    logger.info(`Structured ingest [substack:${username}]: scraping Substack archive`);
+    const items = await scrapeSubstackArchive(username, limit);
+    logger.info(`Structured ingest [substack:${username}]: fetched ${items.length} candidates`);
+    return items.map(item => normalizeSubstackItem(item, username));
+  };
+}
+
+function normalizeAddyOsmaniBlogItem(item: AddyOsmaniBlogItem): NormalizedStoryCandidate {
+  const description = item.excerpt ?? '';
+  const fallbackContent: ContentSignals = {
+    pageTitle: item.title,
+    description,
+    headings: [],
+    paragraphs: description ? [description] : [],
+    hasCodeBlocks: false,
+    bodyText: description,
+  };
+
+  return {
+    id: deriveStoryIdFromUrl(item.url, ADDY_OSMANI_BLOG_SOURCE_ID),
+    title: item.title,
+    url: item.url,
+    sourceId: ADDY_OSMANI_BLOG_SOURCE_ID,
+    date: item.date ?? null,
+    content: fallbackContent,
+  };
+}
+
+export async function ingestAddyOsmaniBlogStructured(options?: StructuredIngestOptions): Promise<NormalizedStoryCandidate[]> {
+  const limit = options?.limit ?? 30;
+  logger.info(`Structured ingest [${ADDY_OSMANI_BLOG_SOURCE_ID}]: scraping Addy Osmani blog`);
+  const items = await scrapeAddyOsmaniBlog(limit);
+  logger.info(`Structured ingest [${ADDY_OSMANI_BLOG_SOURCE_ID}]: fetched ${items.length} candidates`);
+  return items.map(normalizeAddyOsmaniBlogItem);
+}
+
 // Uses the first 44 bits of a SHA-256 digest to stay within JS safe integer range while keeping IDs deterministic.
 export function deriveStoryIdFromUrl(url: string, source?: string): string {
   const hash = createHash('sha256').update(url).digest('hex').slice(0, 12);
@@ -123,6 +190,8 @@ export function getSourceRegistry(): SourceCapability[] {
   const hackernoonAllowlist = parseCsvEnv(process.env.HACKERNOON_DOMAIN_ALLOWLIST);
   const githubBlogAllowlist = parseCsvEnv(process.env.GITHUB_BLOG_DOMAIN_ALLOWLIST);
   const githubBlogEnabled = (process.env.ENABLE_GITHUB_BLOG ?? 'true') !== 'false';
+  const substackUsernames = parseCsvEnv(process.env.SUBSTACK_USERNAMES);
+  const addyOsmaniBlogEnabled = (process.env.ENABLE_ADDY_OSMANI_BLOG ?? 'true') !== 'false';
 
   const hackerNews: SourceCapability = {
     sourceId: HACKERNEWS_SOURCE_ID,
@@ -157,11 +226,39 @@ export function getSourceRegistry(): SourceCapability[] {
     domainAllowlist: githubBlogAllowlist.length ? githubBlogAllowlist : ['github.blog', 'www.github.blog'],
   };
 
+  const addyOsmaniBlog: SourceCapability = {
+    sourceId: ADDY_OSMANI_BLOG_SOURCE_ID,
+    supportsStructuredIngest: true,
+    structuredIngestor: ingestAddyOsmaniBlogStructured,
+    fallbackBrowsingAllowed: false,
+    domainAllowlist: ['addyosmani.com', 'www.addyosmani.com'],
+  };
+
   const registry: SourceCapability[] = [];
+  
   if (githubBlogEnabled) {
     registry.push(githubBlog);
   } else {
     logger.info(`[ingestion] ${GITHUB_BLOG_SOURCE_ID}: disabled via ENABLE_GITHUB_BLOG=false`);
+  }
+
+  if (addyOsmaniBlogEnabled) {
+    registry.push(addyOsmaniBlog);
+  } else {
+    logger.info(`[ingestion] ${ADDY_OSMANI_BLOG_SOURCE_ID}: disabled via ENABLE_ADDY_OSMANI_BLOG=false`);
+  }
+
+  // Register Substack sources for each configured username
+  for (const username of substackUsernames) {
+    const substackSource: SourceCapability = {
+      sourceId: `substack:${username}`,
+      supportsStructuredIngest: true,
+      structuredIngestor: createSubstackIngestor(username),
+      fallbackBrowsingAllowed: false,
+      domainAllowlist: [`${username}.substack.com`],
+    };
+    registry.push(substackSource);
+    logger.info(`[ingestion] Registered Substack source for username: ${username}`);
   }
 
   registry.push(hackernoon, hackerNews, fallbackBrowsing);
