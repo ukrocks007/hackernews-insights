@@ -30,7 +30,14 @@ curl -sSL https://raw.githubusercontent.com/ukrocks007/hackernews-insights/main/
 
 ## Features
 
-- **Headless Browsing**: Uses Playwright to scrape HN safely.
+- **Multi-Source Ingestion**: Scrapes content from:
+  - Hacker News
+  - Hackernoon
+  - GitHub Blog
+  - Substack (config-driven for multiple authors)
+  - Addy Osmani Blog
+  - Optional LLM-guided fallback browsing
+- **Headless Browsing**: Uses Playwright to scrape safely.
 - **Local AI Filtering**: Uses Ollama (`functiongemma`) to evaluate story relevance.
 - **Smart Storage**: Deduplicates stories using SQLite.
 - **Notifications**: Sends concise summaries via Pushover.
@@ -67,6 +74,11 @@ curl -sSL https://raw.githubusercontent.com/ukrocks007/hackernews-insights/main/
   FEEDBACK_PORT=3000
   FEEDBACK_TTL_HOURS=36
   HEADLESS=true
+  
+  # Optional: Configure additional content sources
+  ENABLE_GITHUB_BLOG=true
+  ENABLE_ADDY_OSMANI_BLOG=true
+  SUBSTACK_USERNAMES=addyo,example  # CSV list of Substack usernames
   ```
   - Edit `config/interests.json` to define your topics of interest.
   - If you deploy the feedback endpoint, expose `FEEDBACK_BASE_URL` so that Pushover links resolve back to your device.
@@ -116,7 +128,12 @@ To run this automatically every day at 8:00 AM:
 
 ## Project Structure
 
-- `src/hnScraper.ts`: Playwright logic for scraping HN.
+- `src/hnScraper.ts`: Playwright logic for scraping Hacker News.
+- `src/hackernoonScraper.ts`: Playwright logic for scraping Hackernoon.
+- `src/githubBlogScraper.ts`: Playwright logic for scraping GitHub Blog.
+- `src/substackScraper.ts`: Generic Substack archive scraper (username-driven).
+- `src/addyOsmaniBlogScraper.ts`: Playwright logic for scraping Addy Osmani's blog.
+- `src/sourceRegistry.ts`: Source registration and normalization.
 - `src/relevanceAgent.ts`: Ollama interaction for filtering stories.
 - `src/storage.ts`: SQLite database operations.
 - `src/notifier.ts`: Pushover notification logic.
