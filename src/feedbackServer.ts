@@ -275,6 +275,103 @@ export async function startFeedbackServer(options: FeedbackServerOptions = {}): 
         return;
       }
 
+      // Generate TLDR endpoint
+      if (url.pathname === '/api/generate-tldr' && req.method === 'POST') {
+        let body = '';
+        req.on('data', (chunk) => {
+          body += chunk.toString();
+        });
+        req.on('end', async () => {
+          try {
+            const { storyId } = JSON.parse(body);
+            if (!storyId) {
+              res
+                .writeHead(400, { 'Content-Type': 'application/json' })
+                .end(JSON.stringify({ status: 'error', message: 'Missing storyId' }));
+              return;
+            }
+
+            const { getPrismaClient } = await import('./prismaClient');
+            const prisma = getPrismaClient();
+            
+            // Get story details
+            const story = await prisma.story.findUnique({
+              where: { id: storyId },
+              select: { url: true, tldr: true, title: true }
+            });
+
+            if (!story) {
+              res
+                .writeHead(404, { 'Content-Type': 'application/json' })
+                .end(JSON.stringify({ status: 'error', message: 'Story not found' }));
+              return;
+            }
+
+            if (!story.url) {
+              res
+                .writeHead(400, { 'Content-Type': 'application/json' })
+                .end(JSON.stringify({ 
+                  status: 'error', 
+                  message: 'TLDR unavailable for this article.' 
+                }));
+              return;
+            }
+
+            // Check if TLDR already exists
+            if (story.tldr) {
+              res
+                .writeHead(200, { 'Content-Type': 'application/json' })
+                .end(JSON.stringify({ 
+                  status: 'ok', 
+                  tldr: story.tldr,
+                  cached: true
+                }));
+              return;
+            }
+
+            // Generate new TLDR
+            logger.info(`Generating TLDR for story ${storyId}`);
+            
+            const { generateTLDRForURL } = await import('./tldrGenerator');
+            const result = await generateTLDRForURL(story.url);
+
+            if (!result) {
+              res
+                .writeHead(500, { 'Content-Type': 'application/json' })
+                .end(JSON.stringify({ 
+                  status: 'error', 
+                  message: 'TLDR unavailable for this article.' 
+                }));
+              return;
+            }
+
+            // Save TLDR to database
+            const { saveTLDR } = await import('./storage');
+            await saveTLDR(storyId, result);
+
+            res
+              .writeHead(200, { 'Content-Type': 'application/json' })
+              .end(JSON.stringify({ 
+                status: 'ok', 
+                tldr: result.tldr,
+                cached: false,
+                model: result.model,
+                contentLength: result.contentLength
+              }));
+              
+          } catch (error) {
+            logger.error('Error generating TLDR', error);
+            res
+              .writeHead(500, { 'Content-Type': 'application/json' })
+              .end(JSON.stringify({ 
+                status: 'error', 
+                message: 'TLDR unavailable for this article.' 
+              }));
+          }
+        });
+        return;
+      }
+
       // Default: 404 for other endpoints
       res.writeHead(404, { 'Content-Type': 'application/json' }).end(JSON.stringify({ status: 'not_found' }));
       return;

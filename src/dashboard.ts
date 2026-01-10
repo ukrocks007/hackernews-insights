@@ -236,12 +236,18 @@ export function renderHomePage(
           </div>`
         : `<span class="rating-set">${story.rating}</span>`;
 
+      // TLDR button (only show if story has URL)
+      const tldrButton = story.url 
+        ? `<button class="tldr-btn" onclick="generateTLDR('${story.id}')" title="Generate TLDR">📄 TLDR</button>`
+        : '';
+
       return `<tr data-story-id="${story.id}" class="${story.rating ? 'rated' : 'unrated'}">
       <td>
         ${storyLink}
         <div class="story-meta">
           <span class="source-tag">${escapeHtml(sourceId)}</span>
           ${topicsDisplay ? `<span class="topics-inline">${escapeHtml(topicsDisplay)}${moreTopics}</span>` : ''}
+          ${tldrButton}
         </div>
         ${story.reason ? `<div class="match-reason-row">${matchReason}</div>` : ''}
       </td>
@@ -548,6 +554,128 @@ export function renderHomePage(
       color: #6b7280;
       font-weight: 500;
     }
+    .tldr-btn {
+      padding: 4px 10px;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      background: #fff;
+      color: #374151;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .tldr-btn:hover {
+      background: #f3f4f6;
+      border-color: #667eea;
+    }
+    .tldr-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .modal {
+      display: none;
+      position: fixed;
+      z-index: 1000;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(4px);
+      overflow-y: auto;
+      padding: 20px;
+    }
+    .modal.show {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-content {
+      background: #fff;
+      border-radius: 16px;
+      max-width: 800px;
+      width: 100%;
+      max-height: 90vh;
+      overflow-y: auto;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      position: relative;
+    }
+    .modal-header {
+      padding: 24px;
+      border-bottom: 1px solid #e5e7eb;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #f9fafb;
+      border-radius: 16px 16px 0 0;
+    }
+    .modal-header h2 {
+      margin: 0;
+      font-size: 20px;
+      color: #111827;
+    }
+    .modal-close {
+      background: none;
+      border: none;
+      font-size: 28px;
+      cursor: pointer;
+      color: #6b7280;
+      padding: 0;
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 8px;
+      transition: all 0.2s;
+    }
+    .modal-close:hover {
+      background: #e5e7eb;
+      color: #111827;
+    }
+    .modal-body {
+      padding: 24px;
+    }
+    .tldr-content {
+      line-height: 1.8;
+      color: #374151;
+      font-size: 15px;
+    }
+    .tldr-content ul {
+      margin: 16px 0;
+      padding-left: 24px;
+    }
+    .tldr-content li {
+      margin-bottom: 12px;
+    }
+    .tldr-loading {
+      text-align: center;
+      padding: 40px 20px;
+      color: #6b7280;
+    }
+    .tldr-loading .spinner {
+      display: inline-block;
+      width: 40px;
+      height: 40px;
+      border: 4px solid #e5e7eb;
+      border-top-color: #667eea;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-bottom: 16px;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    .tldr-meta {
+      margin-top: 24px;
+      padding-top: 16px;
+      border-top: 1px solid #e5e7eb;
+      font-size: 12px;
+      color: #6b7280;
+    }
     .pagination {
       display: flex;
       justify-content: space-between;
@@ -737,6 +865,23 @@ export function renderHomePage(
     </div>
   </div>
 
+  <!-- TLDR Modal -->
+  <div id="tldrModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>📄 TLDR Summary</h2>
+        <button class="modal-close" onclick="closeTLDRModal()">&times;</button>
+      </div>
+      <div class="modal-body" id="tldrModalBody">
+        <div class="tldr-loading">
+          <div class="spinner"></div>
+          <p>Generating TLDR summary...</p>
+          <p style="font-size: 12px; margin-top: 8px;">This may take 10-30 seconds</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script>
     // Initialize filter state from URL
     const urlParams = new URLSearchParams(window.location.search);
@@ -834,6 +979,86 @@ export function renderHomePage(
         statusEl.className = 'status-message error';
         statusEl.textContent = 'Error: ' + error.message;
         setTimeout(() => { statusEl.style.display = 'none'; }, 5000);
+      }
+    }
+
+    function closeTLDRModal() {
+      const modal = document.getElementById('tldrModal');
+      modal.classList.remove('show');
+    }
+
+    // Close modal on background click
+    document.getElementById('tldrModal').addEventListener('click', function(e) {
+      if (e.target === this) {
+        closeTLDRModal();
+      }
+    });
+
+    async function generateTLDR(storyId) {
+      const modal = document.getElementById('tldrModal');
+      const modalBody = document.getElementById('tldrModalBody');
+      const statusEl = document.getElementById('statusMessage');
+      
+      // Show modal with loading state
+      modal.classList.add('show');
+      modalBody.innerHTML = \`
+        <div class="tldr-loading">
+          <div class="spinner"></div>
+          <p>Generating TLDR summary...</p>
+          <p style="font-size: 12px; margin-top: 8px;">This may take 10-30 seconds</p>
+        </div>
+      \`;
+      
+      try {
+        const response = await fetch('/api/generate-tldr', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ storyId })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok && data.tldr) {
+          // Format TLDR content (convert to HTML)
+          const tldrHtml = data.tldr
+            .split('\\n')
+            .map(line => line.trim())
+            .filter(line => line)
+            .map(line => {
+              if (line.startsWith('- ') || line.startsWith('* ')) {
+                return '<li>' + line.substring(2) + '</li>';
+              }
+              return '<p>' + line + '</p>';
+            })
+            .join('');
+          
+          const wrappedHtml = tldrHtml.includes('<li>') 
+            ? '<ul>' + tldrHtml.replace(/<\\/p>|<p>/g, '') + '</ul>'
+            : tldrHtml;
+          
+          const metaInfo = data.cached 
+            ? '<p style="color: #059669;">✓ Cached result</p>'
+            : \`<p>Generated with \${data.model || 'qwen3:1.7b'}</p>
+               <p>Content length: ~\${Math.round((data.contentLength || 0) / 1000)}K characters</p>\`;
+          
+          modalBody.innerHTML = \`
+            <div class="tldr-content">
+              \${wrappedHtml}
+            </div>
+            <div class="tldr-meta">
+              \${metaInfo}
+            </div>
+          \`;
+        } else {
+          throw new Error(data.message || 'Failed to generate TLDR');
+        }
+      } catch (error) {
+        modalBody.innerHTML = \`
+          <div style="text-align: center; padding: 40px 20px; color: #991b1b;">
+            <p style="font-size: 18px; margin-bottom: 8px;">⚠️ Error</p>
+            <p>\${error.message}</p>
+          </div>
+        \`;
       }
     }
   </script>

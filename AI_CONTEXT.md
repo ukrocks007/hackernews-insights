@@ -86,6 +86,18 @@ Metadata is displayed inline within the list to aid decision-making without requ
 - **Match reason:** Shows the LLM's rationale for why the story was surfaced (truncated to ~80 chars)
 - **HN Score:** Displayed when available (from Hacker News stories)
 - **Rating badge:** Visual indicator of review state (UNRATED, useful, skip, bookmark)
+- **TLDR button:** Inline button (📄 TLDR) appears for stories with URLs, enabling on-demand article summarization
+
+### TLDR Feature (User-Initiated Summarization)
+- **Purpose:** Help users quickly decide whether to read a full article by providing a concise technical summary
+- **Trigger:** User clicks the "📄 TLDR" button next to a story
+- **UI Flow:**
+  1. Button click opens a modal with loading state
+  2. Backend generates TLDR (10-30 seconds)
+  3. Modal displays bullet-point summary
+  4. Cached TLDRs load instantly on subsequent views
+- **Display:** Modal overlay with formatted TLDR content, model info, and cache status
+- **Integration:** Fully asynchronous, non-blocking, operates independently of review/rating workflow
 
 ### Why Scoring is NOT Shown Prominently
 - **Relevance scores** are internal signals used for ranking and suppression.
@@ -99,9 +111,10 @@ Metadata is displayed inline within the list to aid decision-making without requ
   - Match reasons come from the LLM during relevance checking (`relevanceAgent.ts`)
   - Source information is derived from story IDs
 - **The UI does NOT:**
-  - Perform live LLM calls
+  - Perform live LLM calls (except TLDR, which is explicit and user-initiated)
   - Run embeddings or similarity searches
   - Execute real-time topic extraction
+- **TLDR is an exception:** It performs on-demand LLM inference when explicitly requested by the user, but results are cached.
 - This ensures the dashboard remains fast and predictable, with all data available instantly from the database.
 
 ## Important Files & Responsibilities
@@ -194,11 +207,45 @@ Metadata is displayed inline within the list to aid decision-making without requ
     - `FALLBACK_MAX_PAGES`, `FALLBACK_MAX_CLICKS`, `FALLBACK_MAX_DEPTH`, `FALLBACK_MAX_CANDIDATES`
     - `FALLBACK_USER_AGENT`, `HEADLESS`.
 
+- `src/tldrGenerator.ts`
+  - **TLDR Feature:** User-initiated article summarization using Playwright and Ollama.
+  - **Purpose:** Help users decide whether to read a full article by providing a concise technical summary.
+  - **When triggered:** ONLY when a user explicitly clicks the "TLDR" button on a story row in the dashboard.
+  - **Architecture:**
+    - Uses Playwright (headless) to fetch and extract article content from the story URL.
+    - Strips navigation, footer, ads, cookie banners, comments, and related links.
+    - Extracts: title, meta description, headings (h1-h3), paragraphs, code blocks, and full article text.
+    - Hard timeout: 15 seconds for page load.
+    - Content limit: ~3,000-4,000 words (truncated at sentence boundaries).
+  - **LLM Integration:**
+    - Model: `qwen2.5:0.5b` (lightweight model suitable for Raspberry Pi)
+    - Endpoint: Ollama `/api/chat`
+    - System prompt enforces: neutral tone, factual content, bullet points (max 6), no external knowledge, no speculation
+    - Output format: TLDR with bullet points, no conclusion paragraph
+  - **Storage:**
+    - TLDRs are cached in the database (`tldr`, `tldrModel`, `tldrGeneratedAt`, `tldrContentLength` fields on `Story`)
+    - Cached results are returned immediately on subsequent requests
+  - **Error handling:**
+    - If extraction or generation fails, returns: "TLDR unavailable for this article."
+    - Timeouts and errors are logged but do not crash the server
+  - **What TLDR does NOT do:**
+    - No automatic generation (only on user request)
+    - No comments summarization
+    - No background jobs or crawling
+    - No relevance inference or ranking
+    - No embeddings or search
+    - No external browsing beyond the article URL
+  - **Performance considerations:**
+    - Latency: 10-30 seconds acceptable (Raspberry Pi hardware)
+    - Quality over speed
+    - Single-threaded execution (no parallel TLDR jobs)
+
 ### Storage & database access
 - `prisma/schema.prisma`
   - `Story` (table `stories`):
     - `id` (string, HN id or deterministic hash), `title`, optional `url`, `score`, `rank`, `date` (YYYY-MM-DD string), `reason`.
     - `relevanceScore` (scaled integer), `rating` (string, nullable: `"useful" | "skip" | "bookmark" | null`), `notificationSent`, `firstSeenAt`, `lastNotifiedAt`, `suppressedUntil`.
+    - **TLDR fields:** `tldr` (nullable string), `tldrGeneratedAt` (nullable DateTime), `tldrModel` (nullable string), `tldrContentLength` (nullable int) — stores cached TLDR summaries.
     - Relations: `feedbackEvents`, `storyTopics`.
     - **New `rating` field:** Tracks human review state. `null` means unrated/pending review. Used by the dashboard to prioritize unreviewed items and filter by review status.
   - `FeedbackEvent` (table `feedback_events`): links feedback to a story with `action`, `confidence`, `source`, `createdAt`, optional `metadata` JSON-as-string.
@@ -220,6 +267,8 @@ Metadata is displayed inline within the list to aid decision-making without requ
     - `hasStoryBeenProcessed(id)` — dedup guard.
     - `getStoriesForDate(date)` — convenience query.
     - **`setStoryRating(id, rating)`** — sets the review state (`"useful" | "skip" | "bookmark" | null`) for a story. Used by the dashboard to track human review decisions.
+    - **`saveTLDR(storyId, tldrData)`** — persists a generated TLDR summary to the database with metadata (model, contentLength, generatedAt).
+    - **`getTLDR(storyId)`** — retrieves cached TLDR data for a story, returns null if not yet generated.
   - Topic helpers:
     - `TopicInput` has `name`, `source` (`'title' | 'content' | 'metadata'`), and optional `weight`.
     - When `weight` is omitted, it defaults to `SCORE_SCALE * DEFAULT_TOPIC_WEIGHT_RATIO`.
@@ -318,6 +367,18 @@ Metadata is displayed inline within the list to aid decision-making without requ
   - Sets the review state for a story via `setStoryRating()` in `src/storage.ts`.
   - Returns JSON `{ status: "ok", message, rating }`.
   - Used by the dashboard to record human review decisions without affecting relevance scoring.
+
+- `POST /api/generate-tldr`
+  - JSON body: `{ storyId }`.
+  - **User-initiated TLDR generation endpoint.**
+  - Checks if the story exists and has a URL.
+  - Returns cached TLDR if already generated (`{ status: "ok", tldr, cached: true }`).
+  - Otherwise, generates a new TLDR using `generateTLDRForURL()` from `src/tldrGenerator.ts`:
+    - Extracts article content via Playwright (15s timeout).
+    - Sends content to Ollama qwen2.5:0.5b with strict prompt for bullet-point summary.
+    - Saves result to database and returns `{ status: "ok", tldr, cached: false, model, contentLength }`.
+  - On failure, returns `{ status: "error", message: "TLDR unavailable for this article." }`.
+  - Expected latency: 10-30 seconds for new generation.
 
 ## Environment & Running
 - Environment variables

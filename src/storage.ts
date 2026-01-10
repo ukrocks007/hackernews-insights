@@ -208,3 +208,48 @@ export async function setStoryRating(id: string, rating: StoryRating): Promise<v
   });
   logger.info(`Story ${id} rated as: ${rating ?? 'unrated'}`);
 }
+
+export interface TLDRData {
+  tldr: string;
+  model: string;
+  contentLength: number;
+  generatedAt: Date;
+}
+
+export async function saveTLDR(storyId: string, tldrData: TLDRData): Promise<void> {
+  const prisma = getPrismaClient();
+  await prisma.story.update({
+    where: { id: storyId },
+    data: {
+      tldr: tldrData.tldr,
+      tldrModel: tldrData.model,
+      tldrContentLength: tldrData.contentLength,
+      tldrGeneratedAt: tldrData.generatedAt,
+    },
+  });
+  logger.info(`TLDR saved for story ${storyId} (${tldrData.tldr.length} chars)`);
+}
+
+export async function getTLDR(storyId: string): Promise<TLDRData | null> {
+  const prisma = getPrismaClient();
+  const story = await prisma.story.findUnique({
+    where: { id: storyId },
+    select: {
+      tldr: true,
+      tldrModel: true,
+      tldrContentLength: true,
+      tldrGeneratedAt: true,
+    },
+  });
+  
+  if (!story || !story.tldr) {
+    return null;
+  }
+  
+  return {
+    tldr: story.tldr,
+    model: story.tldrModel || 'unknown',
+    contentLength: story.tldrContentLength || 0,
+    generatedAt: story.tldrGeneratedAt || new Date(),
+  };
+}
