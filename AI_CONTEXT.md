@@ -38,7 +38,71 @@ This file is intended to be read by the assistant at the start of each session t
 - **Notifications & feedback:**
   - `src/notifier.ts` sends Pushover notifications for top stories and can include signed feedback links.
   - `src/feedback.ts` signs/validates feedback links (HMAC), persists feedback events, recomputes relevance, and updates topic scores.
-  - `src/feedbackServer.ts` + `src/dashboard.ts` expose `/`, `/api/feedback`, `/api/trigger-fetch`, `/api/stories`, `/api/submit-feedback`.
+  - `src/feedbackServer.ts` + `src/dashboard.ts` expose `/`, `/api/feedback`, `/api/trigger-fetch`, `/api/stories`, `/api/submit-feedback`, `/api/submit-rating`.
+
+## Dashboard UI & Review Workflow
+
+### Review State & Decision-Making
+The dashboard is designed as a **decision-making interface**, not a content browser. Its primary purpose is to surface items requiring human judgment and enable rapid review cycles.
+
+- **Rating states:**
+  - `null` (unrated) — Items awaiting review
+  - `"useful"` — Valuable content worth keeping
+  - `"skip"` — Not currently relevant
+  - `"bookmark"` — High-priority or reference material
+- **Default view:** Prioritizes **unrated** items (items with `rating = null`). Unrated items are visually emphasized with a yellow highlight to draw attention.
+- **Rated items:** Visually recede with reduced opacity, allowing users to focus on pending decisions.
+
+### Filtering Philosophy
+The UI provides **composable, fast filters** to help users focus their attention:
+
+1. **Review Status Filter:**
+   - Default: Show only unrated items
+   - Options: All, Unrated, Useful, Skip, Bookmark
+   - Purpose: Focus on items needing review or revisit past decisions
+
+2. **Source Filter:**
+   - Multi-select filter using compact chip/pill UI
+   - Sources derived from story IDs (e.g., `hackernews`, `github_blog`, `substack:username`)
+   - Purpose: Filter by content origin (HN, blogs, newsletters, etc.)
+   - No "All sources" button needed—empty selection = all sources
+
+3. **Topic Filter:**
+   - Multi-select filter using compact chip/pill UI
+   - Shows top 20 topics by cumulative score
+   - Purpose: Filter by content subject matter (e.g., "TypeScript", "React", "AI")
+   - Topics are precomputed via `topicExtractor.ts` and stored in the database
+
+4. **Notification Status & Sorting:**
+   - Filter by whether a story has been sent via notification
+   - Sort by: First Seen (default), HN Score, Relevance Score, or Date
+   - Sort order: Ascending or Descending
+
+### Metadata Presentation
+Metadata is displayed inline within the list to aid decision-making without requiring additional clicks:
+
+- **Source tag:** Compact colored badge showing content origin (e.g., `HACKERNEWS`, `GITHUB_BLOG`)
+- **Topics:** Display up to 3 topics inline, with `+N` indicator if more exist
+- **Match reason:** Shows the LLM's rationale for why the story was surfaced (truncated to ~80 chars)
+- **HN Score:** Displayed when available (from Hacker News stories)
+- **Rating badge:** Visual indicator of review state (UNRATED, useful, skip, bookmark)
+
+### Why Scoring is NOT Shown Prominently
+- **Relevance scores** are internal signals used for ranking and suppression.
+- The UI does **not** display raw scores or confidence values to users in the main list.
+- Users make decisions based on **title, source, topics, and match reason**, not numerical scores.
+- This prevents users from over-relying on algorithmic judgments and ensures human agency in review.
+
+### Metadata Precomputation & No Live Inference
+- **All metadata is precomputed** during ingestion:
+  - Topics are extracted via deterministic heuristics in `topicExtractor.ts`
+  - Match reasons come from the LLM during relevance checking (`relevanceAgent.ts`)
+  - Source information is derived from story IDs
+- **The UI does NOT:**
+  - Perform live LLM calls
+  - Run embeddings or similarity searches
+  - Execute real-time topic extraction
+- This ensures the dashboard remains fast and predictable, with all data available instantly from the database.
 
 ## Important Files & Responsibilities
 
@@ -47,6 +111,8 @@ This file is intended to be read by the assistant at the start of each session t
   - Entrypoint (`npm run dev` and `npm start` resolve here via TS/compiled JS).
   - Initializes the database via `initDB()` from `src/storage.ts`.
   - Starts `startFeedbackServer()` and logs failures as warnings, but keeps the agent running.
+  - **Critical:** The app must stay alive after starting the server - there should be NO `finally` block that closes the database or exits.
+  - **Graceful shutdown:** Handles SIGINT and SIGTERM signals to close database connections properly before exit.
   - Exports `fetchAndFilterStories` for the trigger endpoint.
 
 - `src/insightTracker.ts`
@@ -132,8 +198,9 @@ This file is intended to be read by the assistant at the start of each session t
 - `prisma/schema.prisma`
   - `Story` (table `stories`):
     - `id` (string, HN id or deterministic hash), `title`, optional `url`, `score`, `rank`, `date` (YYYY-MM-DD string), `reason`.
-    - `relevanceScore` (scaled integer), `notificationSent`, `firstSeenAt`, `lastNotifiedAt`, `suppressedUntil`.
+    - `relevanceScore` (scaled integer), `rating` (string, nullable: `"useful" | "skip" | "bookmark" | null`), `notificationSent`, `firstSeenAt`, `lastNotifiedAt`, `suppressedUntil`.
     - Relations: `feedbackEvents`, `storyTopics`.
+    - **New `rating` field:** Tracks human review state. `null` means unrated/pending review. Used by the dashboard to prioritize unreviewed items and filter by review status.
   - `FeedbackEvent` (table `feedback_events`): links feedback to a story with `action`, `confidence`, `source`, `createdAt`, optional `metadata` JSON-as-string.
   - `Topic` (table `topics`): topic name, cumulative `score`, timestamps, and `storyRefs` relation.
   - `StoryTopic` (table `story_topics`): join model `{ storyId, topicId }` with `source` and `weight`.
@@ -152,9 +219,11 @@ This file is intended to be read by the assistant at the start of each session t
     - `markStoryAsSent(id)` — marks a story as notified and sets `lastNotifiedAt`.
     - `hasStoryBeenProcessed(id)` — dedup guard.
     - `getStoriesForDate(date)` — convenience query.
+    - **`setStoryRating(id, rating)`** — sets the review state (`"useful" | "skip" | "bookmark" | null`) for a story. Used by the dashboard to track human review decisions.
   - Topic helpers:
     - `TopicInput` has `name`, `source` (`'title' | 'content' | 'metadata'`), and optional `weight`.
     - When `weight` is omitted, it defaults to `SCORE_SCALE * DEFAULT_TOPIC_WEIGHT_RATIO`.
+  - Type export: `StoryRating = 'useful' | 'skip' | 'bookmark' | null`.
 
 ### Feedback, scoring, and dashboard
 - `src/feedback.ts`
@@ -192,10 +261,18 @@ This file is intended to be read by the assistant at the start of each session t
 
 - `src/dashboard.ts`
   - `getStoriesPaginated()` wraps Prisma for server-side pagination, status filtering, search, and sorting by `firstSeenAt`, `score`, `relevanceScore`, or `date`.
+  - **New filtering capabilities:**
+    - `rating`: Filter by review state (`unrated`, `all`, `useful`, `skip`, `bookmark`).
+    - `sources`: Array of source IDs to filter by (e.g., `['hackernews', 'github_blog']`).
+    - `topics`: Array of topic names to filter by (e.g., `['typescript', 'react']`).
+  - `extractSourceFromStoryId()` extracts the source identifier from story IDs (format: `source:id`).
+  - Returns `PaginatedResult` including `availableSources` and `availableTopics` for building filter UI.
   - `renderHomePage()` returns a single-page HTML dashboard with:
-    - Filters (search, notification status, sort field/order),
-    - Table of stories (HN score, relevance, topics, status, first seen),
-    - Inline feedback buttons (approve/reject/irrelevant) backed by `/api/submit-feedback`,
+    - **Review state emphasis:** Unrated items highlighted with yellow background, rated items visually receded with reduced opacity.
+    - **Multi-select filters:** Source and topic filters using chip/pill UI (top 20 topics shown).
+    - **Inline metadata:** Source tags, topics (limit 2-3), and match reason displayed in each row.
+    - **Rating actions:** Buttons for "useful" (✓), "skip" (✗), and "bookmark" (⭐) for unrated items; static display for rated items.
+    - Table of stories (HN score, rating badge, notification status, topics, first seen).
     - A "Trigger Fetch" button that POSTs to `/api/trigger-fetch`.
   - `renderResponse()` renders a simple card-style HTML response for feedback outcomes.
 
@@ -206,14 +283,22 @@ This file is intended to be read by the assistant at the start of each session t
 
 - `src/logger.ts`
   - Central logging utility; use `logger.info`, `logger.warn`, `logger.error` consistently instead of `console.*`.
+  - **PM2-compatible implementation:** Uses direct stream writes (`process.stdout.write`, `process.stderr.write`) instead of `console.log` to ensure immediate log visibility in PM2 monit/logs.
+  - Disables stdout buffering on startup for real-time log output.
+  - Uses ISO timestamps for consistency across environments.
 
 ## HTTP Endpoints Summary
 - `GET /`
-  - Renders the HTML dashboard with filters, pagination, a "Trigger Fetch" button, and inline feedback controls.
-  - Query params: `page`, `limit`, `notificationSent`, `search`, `sortBy`, `sortOrder`.
+  - Renders the HTML dashboard with filters, pagination, a "Trigger Fetch" button, and inline rating controls.
+  - Query params: `page`, `limit`, `notificationSent`, `search`, `sortBy`, `sortOrder`, `rating`, `sources[]`, `topics[]`.
+  - New filtering capabilities:
+    - `rating`: Filter by review state (`unrated`, `all`, `useful`, `skip`, `bookmark`). Defaults to `unrated`.
+    - `sources[]`: Multi-select filter by source ID (e.g., `hackernews`, `github_blog`, `substack:username`).
+    - `topics[]`: Multi-select filter by topic name (e.g., `typescript`, `react`).
 
 - `GET /api/stories`
   - Returns paginated stories as JSON using the same filtering/sorting parameters as `/`.
+  - Includes `availableSources` and `availableTopics` arrays in the response for building filter UI.
 
 - `GET /api/feedback`
   - Accepts signed feedback links (`storyId`, `action`, `confidence`, `source`, `ts`, `sig`).
@@ -227,6 +312,12 @@ This file is intended to be read by the assistant at the start of each session t
 - `POST /api/submit-feedback`
   - JSON body: `{ storyId, action }` (dashboard-level semantics mapped onto `FeedbackAction`).
   - Records explicit feedback from the dashboard (`source = 'dashboard'`) and returns the updated `relevanceScore` and `suppressedUntil` when available.
+
+- `POST /api/submit-rating`
+  - JSON body: `{ storyId, rating }` where `rating` is `"useful" | "skip" | "bookmark" | null`.
+  - Sets the review state for a story via `setStoryRating()` in `src/storage.ts`.
+  - Returns JSON `{ status: "ok", message, rating }`.
+  - Used by the dashboard to record human review decisions without affecting relevance scoring.
 
 ## Environment & Running
 - Environment variables
@@ -263,6 +354,13 @@ This file is intended to be read by the assistant at the start of each session t
   - Production / compiled binary:
     - `npm run build` (or `npm run package:*` targets) builds to `dist/` and/or standalone binaries.
     - `npm start` — runs `node dist/index.js` using the same environment.
+  - **Production with PM2 (recommended):**
+    - `npm install -g pm2` — install PM2 globally
+    - `npm run build` — compile the application
+    - `pm2 start ecosystem.config.js` — start with PM2 using the provided config
+    - `pm2 monit` — view live logs and monitoring
+    - `pm2 logs hackernews-insights` — view application logs
+    - See `PM2_GUIDE.md` for complete PM2 usage instructions
   - Prisma / schema sync:
     - `npm run prisma:generate` — generate Prisma client.
     - `npm run prisma:deploy` — apply migrations or push schema in environments without migration history.

@@ -7,6 +7,9 @@ interface StoriesQueryParams {
   search?: string;
   sortBy?: 'date' | 'score' | 'relevanceScore' | 'firstSeenAt';
   sortOrder?: 'asc' | 'desc';
+  rating?: string | null; // "unrated", "useful", "skip", "bookmark", "all"
+  sources?: string[]; // Filter by source IDs
+  topics?: string[]; // Filter by topic names
 }
 
 interface StoryWithTopics {
@@ -18,6 +21,7 @@ interface StoryWithTopics {
   date: string;
   reason: string | null;
   relevanceScore: number;
+  rating: string | null;
   notificationSent: boolean;
   firstSeenAt: Date;
   lastNotifiedAt: Date | null;
@@ -32,34 +36,119 @@ interface PaginatedResult {
   page: number;
   limit: number;
   totalPages: number;
+  availableSources: string[];
+  availableTopics: string[];
+}
+
+function extractSourceFromStoryId(storyId: string): string {
+  // Story IDs are in format "source:id" or "source_variant:id"
+  const match = storyId.match(/^([^:]+):/);
+  return match ? match[1] : 'unknown';
 }
 
 export async function getStoriesPaginated(params: StoriesQueryParams): Promise<PaginatedResult> {
   const prisma = getPrismaClient();
-  const { page, limit, notificationSent, search, sortBy = 'firstSeenAt', sortOrder = 'desc' } = params;
+  const { 
+    page, 
+    limit, 
+    notificationSent, 
+    search, 
+    sortBy = 'firstSeenAt', 
+    sortOrder = 'desc',
+    rating,
+    sources = [],
+    topics = []
+  } = params;
   const skip = (page - 1) * limit;
 
   const where: Record<string, unknown> = {};
+  
   if (notificationSent !== null && notificationSent !== undefined) {
     where.notificationSent = notificationSent;
   }
+  
   if (search) {
     where.title = { contains: search };
   }
 
-  const [stories, total] = await Promise.all([
-    prisma.story.findMany({
-      where,
-      skip,
-      take: limit,
-      orderBy: { [sortBy]: sortOrder },
-      include: {
-        storyTopics: { include: { topic: true } },
-        feedbackEvents: { select: { action: true, createdAt: true }, orderBy: { createdAt: 'desc' }, take: 5 },
+  // Rating filter
+  if (rating && rating !== 'all') {
+    if (rating === 'unrated') {
+      where.rating = null;
+    } else if (['useful', 'skip', 'bookmark'].includes(rating)) {
+      where.rating = rating;
+    }
+  }
+
+  // Source filter - need to filter by story ID pattern
+  if (sources.length > 0) {
+    // We'll filter in-memory after the query since Prisma doesn't support regex on IDs easily
+  }
+
+  // Topic filter
+  if (topics.length > 0) {
+    where.storyTopics = {
+      some: {
+        topic: {
+          name: { in: topics }
+        }
+      }
+    };
+  }
+
+  let allStories = await prisma.story.findMany({
+    where,
+    orderBy: { [sortBy]: sortOrder },
+    select: {
+      id: true,
+      title: true,
+      url: true,
+      score: true,
+      rank: true,
+      date: true,
+      reason: true,
+      relevanceScore: true,
+      rating: true,
+      notificationSent: true,
+      firstSeenAt: true,
+      lastNotifiedAt: true,
+      suppressedUntil: true,
+      storyTopics: {
+        include: { topic: true }
       },
-    }),
-    prisma.story.count({ where }),
-  ]);
+      feedbackEvents: { 
+        select: { action: true, createdAt: true }, 
+        orderBy: { createdAt: 'desc' }, 
+        take: 5 
+      },
+    },
+  });
+
+  // Post-filter for sources if needed
+  if (sources.length > 0) {
+    allStories = allStories.filter(story => {
+      const storySource = extractSourceFromStoryId(story.id);
+      return sources.includes(storySource);
+    });
+  }
+
+  const total = allStories.length;
+  const stories = allStories.slice(skip, skip + limit);
+
+  // Get available sources and topics for filter dropdowns
+  const allStoriesForMetadata = await prisma.story.findMany({
+    select: { id: true },
+  });
+  const availableSources = Array.from(new Set(
+    allStoriesForMetadata.map(s => extractSourceFromStoryId(s.id))
+  )).sort();
+
+  const allTopics = await prisma.topic.findMany({
+    select: { name: true },
+    orderBy: { score: 'desc' },
+    take: 50, // Limit to top 50 topics
+  });
+  const availableTopics = allTopics.map(t => t.name);
 
   return {
     stories,
@@ -67,6 +156,8 @@ export async function getStoriesPaginated(params: StoriesQueryParams): Promise<P
     page,
     limit,
     totalPages: Math.ceil(total / limit),
+    availableSources,
+    availableTopics,
   };
 }
 
@@ -81,10 +172,18 @@ function escapeHtml(str: string): string {
 
 export function renderHomePage(
   data: PaginatedResult,
-  filters: { notificationSent: string; search: string; sortBy: string; sortOrder: string }
+  filters: { 
+    notificationSent: string; 
+    search: string; 
+    sortBy: string; 
+    sortOrder: string;
+    rating: string;
+    sources: string[];
+    topics: string[];
+  }
 ): string {
-  const { stories, total, page, totalPages } = data;
-  const { notificationSent, search, sortBy, sortOrder } = filters;
+  const { stories, total, page, totalPages, availableSources, availableTopics } = data;
+  const { notificationSent, search, sortBy, sortOrder, rating, sources, topics } = filters;
 
   const buildUrl = (newPage: number) => {
     const params = new URLSearchParams();
@@ -93,46 +192,81 @@ export function renderHomePage(
     if (search) params.set('search', search);
     if (sortBy) params.set('sortBy', sortBy);
     if (sortOrder) params.set('sortOrder', sortOrder);
+    if (rating) params.set('rating', rating);
+    sources.forEach(s => params.append('sources', s));
+    topics.forEach(t => params.append('topics', t));
     return `/?${params.toString()}`;
   };
 
   const storyRows = stories
     .map((story) => {
-      const topics = story.storyTopics
-        .map((st) => st.topic.name)
-        .slice(0, 3)
-        .join(', ');
+      const storyTopics = story.storyTopics.map((st) => st.topic.name);
+      const topicsDisplay = storyTopics.slice(0, 3).join(', ');
+      const moreTopics = storyTopics.length > 3 ? ` +${storyTopics.length - 3}` : '';
+      
       const statusBadge = story.notificationSent
         ? '<span class="badge sent">Sent</span>'
         : '<span class="badge pending">Pending</span>';
+      
+      const ratingBadge = story.rating 
+        ? `<span class="badge rating-${story.rating}">${story.rating}</span>`
+        : '<span class="badge unrated">UNRATED</span>';
+      
       const storyLink = story.url
         ? `<a href="${story.url}" target="_blank" rel="noopener" class="story-link">${escapeHtml(story.title)}</a>`
         : `<span>${escapeHtml(story.title)}</span>`;
+      
       const dateStr = new Date(story.firstSeenAt).toLocaleDateString();
+      const sourceId = extractSourceFromStoryId(story.id);
+      
+      // Match reason display
+      const matchReason = story.reason 
+        ? `<span class="match-reason" title="${escapeHtml(story.reason)}">${escapeHtml(story.reason.substring(0, 80))}${story.reason.length > 80 ? '...' : ''}</span>`
+        : '-';
 
       // Check if feedback exists
       const hasFeedback = story.feedbackEvents.length > 0;
       const feedbackActions = story.feedbackEvents.map((fe) => fe.action).join(', ');
 
-      const feedbackCell = hasFeedback
-        ? `<span class="feedback-status has-feedback" title="${escapeHtml(feedbackActions)}">✓ ${escapeHtml(feedbackActions.split(',')[0])}</span>`
-        : `<div class="feedback-actions">
-            <button class="feedback-btn approve" onclick="submitFeedback('${story.id}', 'approve')" title="Approve">👍</button>
-            <button class="feedback-btn reject" onclick="submitFeedback('${story.id}', 'reject')" title="Reject">👎</button>
-            <button class="feedback-btn irrelevant" onclick="submitFeedback('${story.id}', 'irrelevant')" title="Irrelevant">🚫</button>
-          </div>`;
+      const ratingButtons = !story.rating
+        ? `<div class="rating-actions">
+            <button class="rating-btn useful" onclick="submitRating('${story.id}', 'useful')" title="Useful">✓</button>
+            <button class="rating-btn skip" onclick="submitRating('${story.id}', 'skip')" title="Skip">✗</button>
+            <button class="rating-btn bookmark" onclick="submitRating('${story.id}', 'bookmark')" title="Bookmark">⭐</button>
+          </div>`
+        : `<span class="rating-set">${story.rating}</span>`;
 
-      return `<tr data-story-id="${story.id}">
-      <td>${storyLink}</td>
-      <td>${story.score ?? '-'}</td>
-      <td>${story.relevanceScore}</td>
-      <td>${statusBadge}</td>
-      <td><span class="topics">${escapeHtml(topics) || '-'}</span></td>
-      <td>${dateStr}</td>
-      <td class="feedback-cell">${feedbackCell}</td>
+      return `<tr data-story-id="${story.id}" class="${story.rating ? 'rated' : 'unrated'}">
+      <td>
+        ${storyLink}
+        <div class="story-meta">
+          <span class="source-tag">${escapeHtml(sourceId)}</span>
+          ${topicsDisplay ? `<span class="topics-inline">${escapeHtml(topicsDisplay)}${moreTopics}</span>` : ''}
+        </div>
+        ${story.reason ? `<div class="match-reason-row">${matchReason}</div>` : ''}
+      </td>
+      <td class="center">${story.score ?? '-'}</td>
+      <td class="center">${ratingBadge}</td>
+      <td class="center">${statusBadge}</td>
+      <td class="center">${dateStr}</td>
+      <td class="rating-cell">${ratingButtons}</td>
     </tr>`;
     })
     .join('');
+
+  // Build source filter chips
+  const sourceChips = availableSources.map(src => {
+    const isSelected = sources.includes(src);
+    const className = isSelected ? 'chip chip-selected' : 'chip';
+    return `<button class="${className}" onclick="toggleFilter('sources', '${src}')">${escapeHtml(src)}</button>`;
+  }).join('');
+
+  // Build topic filter chips (show top 20)
+  const topicChips = availableTopics.slice(0, 20).map(topic => {
+    const isSelected = topics.includes(topic);
+    const className = isSelected ? 'chip chip-selected' : 'chip';
+    return `<button class="${className}" onclick="toggleFilter('topics', '${escapeHtml(topic)}')">${escapeHtml(topic)}</button>`;
+  }).join('');
 
   return `<!doctype html>
 <html lang="en">
@@ -151,7 +285,7 @@ export function renderHomePage(
       color: #1f2937;
     }
     .container {
-      max-width: 1400px;
+      max-width: 1600px;
       margin: 0 auto;
     }
     .header {
@@ -199,15 +333,22 @@ export function renderHomePage(
       border-radius: 16px;
       box-shadow: 0 10px 40px rgba(0,0,0,0.15);
       overflow: hidden;
+      margin-bottom: 20px;
     }
     .filters {
       padding: 20px 24px;
       background: #f9fafb;
       border-bottom: 1px solid #e5e7eb;
+    }
+    .filter-row {
       display: flex;
       gap: 16px;
       flex-wrap: wrap;
       align-items: center;
+      margin-bottom: 16px;
+    }
+    .filter-row:last-child {
+      margin-bottom: 0;
     }
     .filter-group {
       display: flex;
@@ -216,7 +357,7 @@ export function renderHomePage(
     }
     .filter-group label {
       font-size: 12px;
-      font-weight: 500;
+      font-weight: 600;
       color: #6b7280;
       text-transform: uppercase;
       letter-spacing: 0.5px;
@@ -233,6 +374,33 @@ export function renderHomePage(
       border-color: #667eea;
       box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
     }
+    .chip-container {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 8px;
+    }
+    .chip {
+      padding: 6px 12px;
+      border: 1px solid #d1d5db;
+      border-radius: 20px;
+      background: #fff;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .chip:hover {
+      border-color: #667eea;
+      background: #f3f4f6;
+    }
+    .chip-selected {
+      background: #667eea;
+      color: #fff;
+      border-color: #667eea;
+    }
+    .chip-selected:hover {
+      background: #5a67d8;
+    }
     .table-wrapper {
       overflow-x: auto;
     }
@@ -245,6 +413,9 @@ export function renderHomePage(
       text-align: left;
       border-bottom: 1px solid #e5e7eb;
     }
+    td.center {
+      text-align: center;
+    }
     th {
       background: #f9fafb;
       font-weight: 600;
@@ -253,23 +424,61 @@ export function renderHomePage(
       letter-spacing: 0.5px;
       color: #6b7280;
     }
+    tr.unrated {
+      background: #fffbeb;
+    }
+    tr.rated {
+      opacity: 0.7;
+    }
     tr:hover {
       background: #f9fafb;
+      opacity: 1;
     }
     .story-link {
       color: #667eea;
       text-decoration: none;
       font-weight: 500;
+      font-size: 15px;
     }
     .story-link:hover {
       text-decoration: underline;
+    }
+    .story-meta {
+      display: flex;
+      gap: 8px;
+      margin-top: 6px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .source-tag {
+      display: inline-block;
+      padding: 2px 8px;
+      background: #e0e7ff;
+      color: #4338ca;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+    .topics-inline {
+      color: #6b7280;
+      font-size: 12px;
+    }
+    .match-reason-row {
+      margin-top: 6px;
+    }
+    .match-reason {
+      color: #059669;
+      font-size: 12px;
+      font-style: italic;
     }
     .badge {
       display: inline-block;
       padding: 4px 10px;
       border-radius: 20px;
-      font-size: 12px;
-      font-weight: 500;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
     }
     .badge.sent {
       background: #d1fae5;
@@ -279,49 +488,64 @@ export function renderHomePage(
       background: #fef3c7;
       color: #92400e;
     }
-    .topics {
-      color: #6b7280;
-      font-size: 13px;
+    .badge.unrated {
+      background: #fef3c7;
+      color: #92400e;
+      font-weight: 700;
     }
-    .feedback-cell {
-      min-width: 140px;
+    .badge.rating-useful {
+      background: #d1fae5;
+      color: #065f46;
     }
-    .feedback-actions {
+    .badge.rating-skip {
+      background: #fee2e2;
+      color: #991b1b;
+    }
+    .badge.rating-bookmark {
+      background: #dbeafe;
+      color: #1e40af;
+    }
+    .rating-cell {
+      min-width: 120px;
+    }
+    .rating-actions {
       display: flex;
       gap: 6px;
       align-items: center;
+      justify-content: center;
     }
-    .feedback-btn {
-      padding: 6px 10px;
+    .rating-btn {
+      padding: 6px 12px;
       border: none;
       border-radius: 6px;
       cursor: pointer;
       font-size: 16px;
       transition: all 0.2s;
       background: #f3f4f6;
+      font-weight: bold;
     }
-    .feedback-btn:hover {
+    .rating-btn:hover {
       transform: scale(1.1);
     }
-    .feedback-btn.approve:hover {
+    .rating-btn.useful:hover {
       background: #d1fae5;
+      color: #065f46;
     }
-    .feedback-btn.reject:hover {
+    .rating-btn.skip:hover {
       background: #fee2e2;
+      color: #991b1b;
     }
-    .feedback-btn.irrelevant:hover {
+    .rating-btn.bookmark:hover {
       background: #fef3c7;
+      color: #92400e;
     }
-    .feedback-btn:disabled {
+    .rating-btn:disabled {
       opacity: 0.5;
       cursor: not-allowed;
     }
-    .feedback-status {
+    .rating-set {
       font-size: 13px;
       color: #6b7280;
-    }
-    .feedback-status.has-feedback {
-      color: #059669;
       font-weight: 500;
     }
     .pagination {
@@ -388,6 +612,12 @@ export function renderHomePage(
       margin: 0 0 8px 0;
       color: #374151;
     }
+    .section-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #374151;
+      margin: 16px 0 8px 0;
+    }
   </style>
 </head>
 <body>
@@ -402,39 +632,68 @@ export function renderHomePage(
     <div id="statusMessage" class="status-message"></div>
 
     <div class="card">
-      <form class="filters" method="GET" action="/">
-        <div class="filter-group">
-          <label for="search">Search</label>
-          <input type="text" id="search" name="search" placeholder="Search titles..." value="${escapeHtml(search)}">
+      <form class="filters" method="GET" action="/" id="filterForm">
+        <div class="filter-row">
+          <div class="filter-group">
+            <label for="search">Search</label>
+            <input type="text" id="search" name="search" placeholder="Search titles..." value="${escapeHtml(search)}">
+          </div>
+          <div class="filter-group">
+            <label for="rating">Review Status</label>
+            <select id="rating" name="rating">
+              <option value="unrated" ${rating === 'unrated' || !rating ? 'selected' : ''}>Unrated (Default)</option>
+              <option value="all" ${rating === 'all' ? 'selected' : ''}>All</option>
+              <option value="useful" ${rating === 'useful' ? 'selected' : ''}>Useful</option>
+              <option value="skip" ${rating === 'skip' ? 'selected' : ''}>Skip</option>
+              <option value="bookmark" ${rating === 'bookmark' ? 'selected' : ''}>Bookmark</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label for="notificationSent">Notification</label>
+            <select id="notificationSent" name="notificationSent">
+              <option value="">All</option>
+              <option value="true" ${notificationSent === 'true' ? 'selected' : ''}>Sent</option>
+              <option value="false" ${notificationSent === 'false' ? 'selected' : ''}>Pending</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label for="sortBy">Sort By</label>
+            <select id="sortBy" name="sortBy">
+              <option value="firstSeenAt" ${sortBy === 'firstSeenAt' ? 'selected' : ''}>First Seen</option>
+              <option value="score" ${sortBy === 'score' ? 'selected' : ''}>HN Score</option>
+              <option value="relevanceScore" ${sortBy === 'relevanceScore' ? 'selected' : ''}>Relevance</option>
+              <option value="date" ${sortBy === 'date' ? 'selected' : ''}>Date</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label for="sortOrder">Order</label>
+            <select id="sortOrder" name="sortOrder">
+              <option value="desc" ${sortOrder === 'desc' ? 'selected' : ''}>Descending</option>
+              <option value="asc" ${sortOrder === 'asc' ? 'selected' : ''}>Ascending</option>
+            </select>
+          </div>
+          <div class="filter-group" style="justify-content: flex-end;">
+            <label>&nbsp;</label>
+            <button type="submit" class="btn btn-primary">Apply Filters</button>
+          </div>
         </div>
-        <div class="filter-group">
-          <label for="notificationSent">Status</label>
-          <select id="notificationSent" name="notificationSent">
-            <option value="">All</option>
-            <option value="true" ${notificationSent === 'true' ? 'selected' : ''}>Sent</option>
-            <option value="false" ${notificationSent === 'false' ? 'selected' : ''}>Pending</option>
-          </select>
+
+        ${availableSources.length > 0 ? `
+        <div class="section-title">Filter by Source</div>
+        <div class="chip-container">
+          ${sourceChips}
         </div>
-        <div class="filter-group">
-          <label for="sortBy">Sort By</label>
-          <select id="sortBy" name="sortBy">
-            <option value="firstSeenAt" ${sortBy === 'firstSeenAt' ? 'selected' : ''}>First Seen</option>
-            <option value="score" ${sortBy === 'score' ? 'selected' : ''}>HN Score</option>
-            <option value="relevanceScore" ${sortBy === 'relevanceScore' ? 'selected' : ''}>Relevance</option>
-            <option value="date" ${sortBy === 'date' ? 'selected' : ''}>Date</option>
-          </select>
+        ` : ''}
+
+        ${availableTopics.length > 0 ? `
+        <div class="section-title">Filter by Topic (Top 20)</div>
+        <div class="chip-container">
+          ${topicChips}
         </div>
-        <div class="filter-group">
-          <label for="sortOrder">Order</label>
-          <select id="sortOrder" name="sortOrder">
-            <option value="desc" ${sortOrder === 'desc' ? 'selected' : ''}>Descending</option>
-            <option value="asc" ${sortOrder === 'asc' ? 'selected' : ''}>Ascending</option>
-          </select>
-        </div>
-        <div class="filter-group" style="justify-content: flex-end;">
-          <label>&nbsp;</label>
-          <button type="submit" class="btn btn-primary">Apply Filters</button>
-        </div>
+        ` : ''}
+
+        <input type="hidden" id="sourcesInput" name="sources" value="">
+        <input type="hidden" id="topicsInput" name="topics" value="">
       </form>
 
       <div class="table-wrapper">
@@ -444,13 +703,12 @@ export function renderHomePage(
         <table>
           <thead>
             <tr>
-              <th>Title</th>
-              <th>HN Score</th>
-              <th>Relevance</th>
-              <th>Status</th>
-              <th>Topics</th>
-              <th>First Seen</th>
-              <th>Feedback</th>
+              <th>Title & Metadata</th>
+              <th class="center">Score</th>
+              <th class="center">Rating</th>
+              <th class="center">Status</th>
+              <th class="center">First Seen</th>
+              <th class="center">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -480,6 +738,33 @@ export function renderHomePage(
   </div>
 
   <script>
+    // Initialize filter state from URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const selectedSources = urlParams.getAll('sources');
+    const selectedTopics = urlParams.getAll('topics');
+    
+    // Set hidden inputs
+    document.getElementById('sourcesInput').value = selectedSources.join(',');
+    document.getElementById('topicsInput').value = selectedTopics.join(',');
+
+    function toggleFilter(type, value) {
+      const input = document.getElementById(type + 'Input');
+      const current = input.value ? input.value.split(',') : [];
+      const index = current.indexOf(value);
+      
+      if (index > -1) {
+        current.splice(index, 1);
+      } else {
+        current.push(value);
+      }
+      
+      input.value = current.filter(v => v).join(',');
+      
+      // Update URL and reload
+      const form = document.getElementById('filterForm');
+      form.submit();
+    }
+
     async function triggerFetch() {
       const btn = document.getElementById('fetchBtn');
       const statusEl = document.getElementById('statusMessage');
@@ -513,36 +798,38 @@ export function renderHomePage(
       }
     }
 
-    async function submitFeedback(storyId, action) {
+    async function submitRating(storyId, rating) {
       const statusEl = document.getElementById('statusMessage');
       const row = document.querySelector(\`tr[data-story-id="\${storyId}"]\`);
-      const feedbackCell = row?.querySelector('.feedback-cell');
+      const ratingCell = row?.querySelector('.rating-cell');
       
-      if (!feedbackCell) return;
+      if (!ratingCell) return;
       
-      const originalContent = feedbackCell.innerHTML;
-      feedbackCell.innerHTML = '<span class="feedback-status">⏳ Saving...</span>';
+      const originalContent = ratingCell.innerHTML;
+      ratingCell.innerHTML = '<span class="rating-set">⏳ Saving...</span>';
       
       try {
-        const response = await fetch('/api/submit-feedback', {
+        const response = await fetch('/api/submit-rating', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ storyId, action })
+          body: JSON.stringify({ storyId, rating })
         });
         
         const data = await response.json();
         
         if (response.ok) {
-          feedbackCell.innerHTML = \`<span class="feedback-status has-feedback" title="\${action}">✓ \${action}</span>\`;
+          ratingCell.innerHTML = \`<span class="rating-set">\${rating}</span>\`;
+          row.classList.remove('unrated');
+          row.classList.add('rated');
           statusEl.style.display = 'block';
           statusEl.className = 'status-message success';
-          statusEl.textContent = \`Feedback saved: \${action}\`;
+          statusEl.textContent = \`Rating saved: \${rating}\`;
           setTimeout(() => { statusEl.style.display = 'none'; }, 3000);
         } else {
-          throw new Error(data.message || 'Failed to save feedback');
+          throw new Error(data.message || 'Failed to save rating');
         }
       } catch (error) {
-        feedbackCell.innerHTML = originalContent;
+        ratingCell.innerHTML = originalContent;
         statusEl.style.display = 'block';
         statusEl.className = 'status-message error';
         statusEl.textContent = 'Error: ' + error.message;

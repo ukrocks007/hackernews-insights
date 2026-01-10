@@ -12,7 +12,14 @@ async function main() {
     logger.info("Starting HN Insights Agent...");
     await initDB();
     try {
-      await startFeedbackServer();
+      const server = await startFeedbackServer();
+      if (server) {
+        logger.info("Feedback server started successfully. Application is running...");
+        // Keep the process alive - the server will handle incoming requests
+        // Process will only exit on fatal errors or manual termination
+      } else {
+        logger.info("Feedback server disabled. Application is running...");
+      }
     } catch (error) {
       const reason =
         error instanceof Error
@@ -30,11 +37,22 @@ async function main() {
   } catch (error: any) {
     logger.error("Fatal error in HN Insights Agent:", error);
     await sendErrorNotification(error);
-    process.exit(1);
-  } finally {
     await closeDB();
-    logger.info("Done.");
+    process.exit(1);
   }
 }
+
+// Handle graceful shutdown
+process.on('SIGINT', async () => {
+  logger.info("Received SIGINT signal. Shutting down gracefully...");
+  await closeDB();
+  process.exit(0);
+});
+
+process.on('SIGTERM', async () => {
+  logger.info("Received SIGTERM signal. Shutting down gracefully...");
+  await closeDB();
+  process.exit(0);
+});
 
 main();

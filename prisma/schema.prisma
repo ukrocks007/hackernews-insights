@@ -16,6 +16,7 @@ model Story {
   date             String
   reason           String?
   relevanceScore   Int             @default(0) @map("relevance_score")
+  rating           String?         // "useful" | "skip" | "bookmark" | null
   notificationSent Boolean         @default(false) @map("notification_sent")
   firstSeenAt      DateTime        @default(now()) @map("first_seen_at")
   lastNotifiedAt   DateTime?       @map("last_notified_at")
@@ -25,6 +26,7 @@ model Story {
 
   @@index([notificationSent])
   @@index([date])
+  @@index([rating])
   @@map("stories")
 }
 

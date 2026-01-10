@@ -197,3 +197,14 @@ export async function getStoriesForDate(date: string): Promise<Story[]> {
 export async function closeDB(): Promise<void> {
   await disconnectPrisma();
 }
+
+export type StoryRating = 'useful' | 'skip' | 'bookmark' | null;
+
+export async function setStoryRating(id: string, rating: StoryRating): Promise<void> {
+  const prisma = getPrismaClient();
+  await prisma.story.update({
+    where: { id },
+    data: { rating },
+  });
+  logger.info(`Story ${id} rated as: ${rating ?? 'unrated'}`);
+}

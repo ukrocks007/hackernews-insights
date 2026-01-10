@@ -49,12 +49,25 @@ export async function startFeedbackServer(options: FeedbackServerOptions = {}): 
         const search = url.searchParams.get('search') || '';
         const sortBy = (url.searchParams.get('sortBy') || 'firstSeenAt') as 'date' | 'score' | 'relevanceScore' | 'firstSeenAt';
         const sortOrder = (url.searchParams.get('sortOrder') || 'desc') as 'asc' | 'desc';
+        const rating = url.searchParams.get('rating') || 'unrated';
+        const sources = url.searchParams.getAll('sources').filter(s => s);
+        const topics = url.searchParams.getAll('topics').filter(t => t);
 
         let notificationSent: boolean | null = null;
         if (notificationSentParam === 'true') notificationSent = true;
         else if (notificationSentParam === 'false') notificationSent = false;
 
-        const data = await getStoriesPaginated({ page, limit, notificationSent, search, sortBy, sortOrder });
+        const data = await getStoriesPaginated({ 
+          page, 
+          limit, 
+          notificationSent, 
+          search, 
+          sortBy, 
+          sortOrder,
+          rating,
+          sources,
+          topics
+        });
 
         res.writeHead(200, { 'Content-Type': 'text/html' }).end(
           renderHomePage(data, {
@@ -62,6 +75,9 @@ export async function startFeedbackServer(options: FeedbackServerOptions = {}): 
             search,
             sortBy,
             sortOrder,
+            rating,
+            sources,
+            topics,
           })
         );
         return;
@@ -75,12 +91,25 @@ export async function startFeedbackServer(options: FeedbackServerOptions = {}): 
         const search = url.searchParams.get('search') || '';
         const sortBy = (url.searchParams.get('sortBy') || 'firstSeenAt') as 'date' | 'score' | 'relevanceScore' | 'firstSeenAt';
         const sortOrder = (url.searchParams.get('sortOrder') || 'desc') as 'asc' | 'desc';
+        const rating = url.searchParams.get('rating') || 'unrated';
+        const sources = url.searchParams.getAll('sources').filter(s => s);
+        const topics = url.searchParams.getAll('topics').filter(t => t);
 
         let notificationSent: boolean | null = null;
         if (notificationSentParam === 'true') notificationSent = true;
         else if (notificationSentParam === 'false') notificationSent = false;
 
-        const data = await getStoriesPaginated({ page, limit, notificationSent, search, sortBy, sortOrder });
+        const data = await getStoriesPaginated({ 
+          page, 
+          limit, 
+          notificationSent, 
+          search, 
+          sortBy, 
+          sortOrder,
+          rating,
+          sources,
+          topics
+        });
         res.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify(data));
         return;
       }
@@ -191,6 +220,53 @@ export async function startFeedbackServer(options: FeedbackServerOptions = {}): 
               );
           } catch (error) {
             logger.error('Error processing feedback submission', error);
+            res
+              .writeHead(500, { 'Content-Type': 'application/json' })
+              .end(JSON.stringify({ status: 'error', message: String(error) }));
+          }
+        });
+        return;
+      }
+
+      // Submit rating endpoint (from dashboard)
+      if (url.pathname === '/api/submit-rating' && req.method === 'POST') {
+        let body = '';
+        req.on('data', (chunk) => {
+          body += chunk.toString();
+        });
+        req.on('end', async () => {
+          try {
+            const { storyId, rating } = JSON.parse(body);
+            if (!storyId) {
+              res
+                .writeHead(400, { 'Content-Type': 'application/json' })
+                .end(JSON.stringify({ status: 'error', message: 'Missing storyId' }));
+              return;
+            }
+
+            // Validate rating
+            const validRatings = ['useful', 'skip', 'bookmark', null];
+            if (rating !== null && !validRatings.includes(rating)) {
+              res
+                .writeHead(400, { 'Content-Type': 'application/json' })
+                .end(JSON.stringify({ status: 'error', message: 'Invalid rating value' }));
+              return;
+            }
+
+            const { setStoryRating } = await import('./storage');
+            await setStoryRating(storyId, rating);
+
+            res
+              .writeHead(200, { 'Content-Type': 'application/json' })
+              .end(
+                JSON.stringify({
+                  status: 'ok',
+                  message: 'Rating saved',
+                  rating,
+                })
+              );
+          } catch (error) {
+            logger.error('Error processing rating submission', error);
             res
               .writeHead(500, { 'Content-Type': 'application/json' })
               .end(JSON.stringify({ status: 'error', message: String(error) }));

@@ -4,3 +4,6 @@ dist
 db/hn.sqlite
 prisma/db/
 cron.log
+logs/
+*.log
+.pm2/
