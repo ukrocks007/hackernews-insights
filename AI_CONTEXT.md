@@ -22,6 +22,8 @@ This file is intended to be read by the assistant at the start of each session t
     - Hacker News (structured scraping via Playwright)
     - Hackernoon tag pages (structured scraping via Playwright)
     - GitHub Blog (structured scraping via Playwright)
+    - Substack (generic, config-driven for multiple authors via Playwright)
+    - Addy Osmani Blog (structured scraping via Playwright)
     - Optional LLM-guided fallback browsing over arbitrary seed URLs.
   - Each source either has a `structuredIngestor` or is browsed via the LLM-driven fallback browser.
 - **Scraping & content signals:**
@@ -60,13 +62,20 @@ This file is intended to be read by the assistant at the start of each session t
 - `src/sourceRegistry.ts`
   - Declares `SourceCapability`, `StructuredIngestor`, and `NormalizedStoryCandidate`.
   - `getSourceRegistry()` returns the ordered list of sources:
+    - `github_blog` — structured ingest via `ingestGithubBlogStructured`.
+    - `addy_osmani_blog` — structured ingest via `ingestAddyOsmaniBlogStructured`.
+    - `substack:{username}` — generic structured ingest via `createSubstackIngestor(username)` for each configured username.
     - `hackernoon` — structured ingest via `ingestHackernoonStructured`, with optional LLM fallback.
     - `hackernews` — structured ingest via `ingestHackerNewsStructured`.
     - `fallback-browse` — generic LLM-driven browsing if configured.
   - Reads environment:
     - `FALLBACK_SEED_URLS`, `FALLBACK_DOMAIN_ALLOWLIST` (CSV)
     - `HACKERNOON_SEED_URLS`, `HACKERNOON_DOMAIN_ALLOWLIST`, `HACKERNOON_TAG_URL`.
+    - `GITHUB_BLOG_DOMAIN_ALLOWLIST`, `ENABLE_GITHUB_BLOG` (default true).
+    - `SUBSTACK_USERNAMES` (CSV) — configures multiple Substack sources.
+    - `ENABLE_ADDY_OSMANI_BLOG` (default true).
   - `deriveStoryIdFromUrl()` produces deterministic IDs for non-HN sources.
+  - `createSubstackIngestor(username)` — factory function that creates a generic Substack ingestor for any username.
 
 - `src/hnScraper.ts`
   - Uses Playwright to scrape Hacker News front pages, extracting ID, title, URL, HN score, and rank.
@@ -75,6 +84,23 @@ This file is intended to be read by the assistant at the start of each session t
 - `src/hackernoonScraper.ts`
   - Uses Playwright to scrape Hackernoon tag pages, heuristically selecting article-like paths.
   - Honors `HEADLESS` and returns a list of `{ title, url }` items.
+
+- `src/githubBlogScraper.ts`
+  - Uses Playwright to scrape github.blog homepage, extracting title, URL, date, and excerpt from article elements.
+  - Honors `HEADLESS` and blocks heavy assets for performance.
+
+- `src/substackScraper.ts`
+  - Generic Substack archive scraper accepting a username parameter.
+  - Scrapes `https://{username}.substack.com/archive?sort=new` for recent posts.
+  - Extracts title, URL, date, and excerpt from post links and nearby elements.
+  - Returns `SubstackItem[]` interface.
+  - Honors `HEADLESS` and blocks heavy assets for performance.
+
+- `src/addyOsmaniBlogScraper.ts`
+  - Scrapes addyosmani.com/blog for recent blog posts.
+  - Extracts title, URL, date, and excerpt from article/list elements.
+  - Returns `AddyOsmaniBlogItem[]` interface.
+  - Honors `HEADLESS` and blocks heavy assets for performance.
 
 - `src/contentScraper.ts`
   - Uses Playwright to visit a story URL and extract `ContentSignals`:
@@ -218,8 +244,10 @@ This file is intended to be read by the assistant at the start of each session t
   - Ingestion & sources
     - `HACKERNOON_TAG_URL` — override default Hackernoon tag page.
     - `HACKERNOON_SEED_URLS`, `HACKERNOON_DOMAIN_ALLOWLIST` — CSV lists for Hackernoon structured/fallback settings.
-    - `ENABLE_GITHUB_BLOG` — set to `'false'` to disable the GitHub Blog structured source.
+    - `ENABLE_GITHUB_BLOG` — set to `'false'` to disable the GitHub Blog structured source (default: `'true'`).
     - `GITHUB_BLOG_DOMAIN_ALLOWLIST` — optional CSV allowlist for GitHub Blog scraping (defaults to `github.blog`).
+    - `ENABLE_ADDY_OSMANI_BLOG` — set to `'false'` to disable the Addy Osmani Blog structured source (default: `'true'`).
+    - `SUBSTACK_USERNAMES` — CSV list of Substack usernames to ingest (e.g., `'addyo,example'`). Each username creates a separate source `substack:{username}`.
     - `FALLBACK_SEED_URLS`, `FALLBACK_DOMAIN_ALLOWLIST` — CSV lists for generic fallback browsing.
     - `FALLBACK_MAX_PAGES`, `FALLBACK_MAX_CLICKS`, `FALLBACK_MAX_DEPTH`, `FALLBACK_MAX_CANDIDATES`.
     - `FALLBACK_TIMEOUT_MS`, `FALLBACK_NAV_TIMEOUT_MS`, `FALLBACK_DECISION_TIMEOUT_MS`, `FALLBACK_USER_AGENT`.
