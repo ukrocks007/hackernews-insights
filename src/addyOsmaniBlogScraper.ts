@@ -38,50 +38,49 @@ export async function scrapeAddyOsmaniBlog(limit: number = 30): Promise<AddyOsma
     // Wait a moment for any dynamic content
     await page.waitForTimeout(2000);
 
-    // Look for blog post entries - typically articles, list items, or divs with links
+    // Look for blog post entries - Addy's blog uses article.card structure
     const items = await page
       .$$eval(
-        'article, .post, .blog-post, li, div',
+        'article.card, .card',
         (elements, max) => {
           const results: Array<{ title: string; url: string; date?: string | null; excerpt?: string | null }> = [];
           const seen = new Set<string>();
 
           for (const el of elements) {
-            // Find a link within this element
-            const link = el.querySelector('a[href]') as HTMLAnchorElement;
-            if (!link) continue;
+            // Find the main link - could be in h3.card-title or directly on the article
+            const titleLink = el.querySelector('.card-title a, h3 a, a[href*="/blog/"]') as HTMLAnchorElement;
+            if (!titleLink) continue;
 
-            const href = link.href;
+            const href = titleLink.href;
             if (!href || seen.has(href)) continue;
 
             // Filter for actual blog post URLs (not navigation, social, etc.)
-            // Typically blog posts will be on the same domain
             try {
               const url = new URL(href);
               if (!url.hostname.includes('addyosmani.com')) continue;
               
               // Skip navigation and non-article links
-              if (href.includes('/tag/') || href.includes('/category/') || href === ADDY_OSMANI_BLOG_URL) continue;
+              if (href.includes('/tag/') || href.includes('/category/') || href === 'https://addyosmani.com/blog/' || href === 'https://addyosmani.com/blog') continue;
             } catch {
               continue;
             }
 
             seen.add(href);
 
-            // Extract title - could be from heading, link text, or title attribute
-            const headingEl = el.querySelector('h1, h2, h3, h4');
-            const titleText = headingEl?.textContent?.trim() || link.textContent?.trim() || link.title?.trim() || '';
+            // Extract title from card-title or heading
+            const headingEl = el.querySelector('.card-title, h3, h2, h1');
+            const titleText = headingEl?.textContent?.trim() || titleLink.textContent?.trim() || titleLink.title?.trim() || '';
             
             if (!titleText || titleText.length < 3) continue;
 
-            // Look for date
+            // Look for date - typically in time.card-date
             let date: string | null = null;
-            const timeEl = el.querySelector('time');
+            const timeEl = el.querySelector('time.card-date, time, .card-date');
             if (timeEl) {
               date = timeEl.getAttribute('datetime') || timeEl.textContent?.trim() || null;
             } else {
               // Look for date-like text patterns
-              const datePattern = /\d{4}-\d{2}-\d{2}|\d{1,2}\s+\w+\s+\d{4}/;
+              const datePattern = /\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2}\s+\d{4}\b|\d{4}-\d{2}-\d{2}/i;
               const textContent = el.textContent || '';
               const dateMatch = textContent.match(datePattern);
               if (dateMatch) {
@@ -89,11 +88,12 @@ export async function scrapeAddyOsmaniBlog(limit: number = 30): Promise<AddyOsma
               }
             }
 
-            // Look for excerpt/description
+            // Look for excerpt/description - typically in card-description
             let excerpt: string | null = null;
-            const excerptEl = el.querySelector('p, .excerpt, .description, .summary');
-            if (excerptEl && excerptEl !== link && !excerptEl.contains(link)) {
+            const excerptEl = el.querySelector('.card-description, p, .excerpt, .description, .summary');
+            if (excerptEl && excerptEl !== titleLink && !excerptEl.contains(titleLink)) {
               excerpt = excerptEl.textContent?.trim() || null;
+              if (excerpt && excerpt.length < 5) excerpt = null; // Skip empty descriptions
             }
 
             results.push({
