@@ -42,6 +42,16 @@ function toScrapedStory(candidate: NormalizedStoryCandidate): ScrapedStory {
   };
 }
 
+function resolveCandidateDate(candidate: NormalizedStoryCandidate): string {
+  if (candidate.date) {
+    const parsed = new Date(candidate.date);
+    if (!isNaN(parsed.getTime())) {
+      return parsed.toISOString().split('T')[0];
+    }
+  }
+  return new Date().toISOString().split('T')[0];
+}
+
 async function processCandidate(candidate: NormalizedStoryCandidate): Promise<boolean> {
   const duplicate = await hasStoryBeenProcessed(candidate.id);
   if (duplicate) {
@@ -77,7 +87,7 @@ async function processCandidate(candidate: NormalizedStoryCandidate): Promise<bo
       url: relevanceInput.url,
       score: relevanceInput.score,
       rank: relevanceInput.rank,
-      date: new Date().toISOString().split('T')[0], // YYYY-MM-DD
+      date: resolveCandidateDate(candidate), // YYYY-MM-DD
       reason: result.reason,
       relevanceScore: INITIAL_RELEVANCE_SCORE,
       notificationSent: false,
