@@ -1,10 +1,12 @@
 import { createHash } from 'crypto';
 import { scrapeTopStories, ScrapedStory } from './hnScraper';
 import { scrapeTaggedStories } from './hackernoonScraper';
+import { scrapeGithubBlogPosts, GithubBlogItem } from './githubBlogScraper';
 import logger from './logger';
 import { ContentSignals } from './contentScraper';
 
 export const HACKERNEWS_SOURCE_ID = 'hackernews';
+export const GITHUB_BLOG_SOURCE_ID = 'github_blog';
 
 export interface NormalizedStoryCandidate {
   id: string;
@@ -13,6 +15,7 @@ export interface NormalizedStoryCandidate {
   sourceId: string;
   score?: number | null;
   rank?: number | null;
+  date?: string | null;
   content?: ContentSignals | null;
 }
 
@@ -69,6 +72,35 @@ export async function ingestHackernoonStructured(options?: StructuredIngestOptio
   return items.map(normalizeHackernoonStoryFromItem);
 }
 
+function normalizeGithubBlogItem(item: GithubBlogItem): NormalizedStoryCandidate {
+  const description = item.excerpt ?? '';
+  const fallbackContent: ContentSignals = {
+    pageTitle: item.title,
+    description,
+    headings: [],
+    paragraphs: description ? [description] : [],
+    hasCodeBlocks: false,
+    bodyText: description,
+  };
+
+  return {
+    id: deriveStoryIdFromUrl(item.url, GITHUB_BLOG_SOURCE_ID),
+    title: item.title,
+    url: item.url,
+    sourceId: GITHUB_BLOG_SOURCE_ID,
+    date: item.date ?? null,
+    content: fallbackContent,
+  };
+}
+
+export async function ingestGithubBlogStructured(options?: StructuredIngestOptions): Promise<NormalizedStoryCandidate[]> {
+  const limit = options?.limit ?? 30;
+  logger.info(`Structured ingest [${GITHUB_BLOG_SOURCE_ID}]: scraping GitHub Blog homepage`);
+  const items = await scrapeGithubBlogPosts(limit);
+  logger.info(`Structured ingest [${GITHUB_BLOG_SOURCE_ID}]: fetched ${items.length} candidates`);
+  return items.map(normalizeGithubBlogItem);
+}
+
 // Uses the first 44 bits of a SHA-256 digest to stay within JS safe integer range while keeping IDs deterministic.
 export function deriveStoryIdFromUrl(url: string, source?: string): string {
   const hash = createHash('sha256').update(url).digest('hex').slice(0, 12);
@@ -89,6 +121,8 @@ export function getSourceRegistry(): SourceCapability[] {
   const fallbackAllowlist = parseCsvEnv(process.env.FALLBACK_DOMAIN_ALLOWLIST);
   const hackernoonSeeds = parseCsvEnv(process.env.HACKERNOON_SEED_URLS);
   const hackernoonAllowlist = parseCsvEnv(process.env.HACKERNOON_DOMAIN_ALLOWLIST);
+  const githubBlogAllowlist = parseCsvEnv(process.env.GITHUB_BLOG_DOMAIN_ALLOWLIST);
+  const githubBlogEnabled = (process.env.ENABLE_GITHUB_BLOG ?? 'true') !== 'false';
 
   const hackerNews: SourceCapability = {
     sourceId: HACKERNEWS_SOURCE_ID,
@@ -115,5 +149,22 @@ export function getSourceRegistry(): SourceCapability[] {
     seedUrls: hackernoonSeeds.length ? hackernoonSeeds : ['https://hackernoon.com/tagged/hackernoon-top-story'],
   };
 
-  return [hackernoon, hackerNews, fallbackBrowsing];
+  const githubBlog: SourceCapability = {
+    sourceId: GITHUB_BLOG_SOURCE_ID,
+    supportsStructuredIngest: true,
+    structuredIngestor: ingestGithubBlogStructured,
+    fallbackBrowsingAllowed: false,
+    domainAllowlist: githubBlogAllowlist.length ? githubBlogAllowlist : ['github.blog', 'www.github.blog'],
+  };
+
+  const registry: SourceCapability[] = [];
+  if (githubBlogEnabled) {
+    registry.push(githubBlog);
+  } else {
+    logger.info(`[ingestion] ${GITHUB_BLOG_SOURCE_ID}: disabled via ENABLE_GITHUB_BLOG=false`);
+  }
+
+  registry.push(hackernoon, hackerNews, fallbackBrowsing);
+
+  return registry;
 }

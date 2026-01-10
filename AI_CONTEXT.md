@@ -21,6 +21,7 @@ This file is intended to be read by the assistant at the start of each session t
   - `src/sourceRegistry.ts` defines all sources via `SourceCapability`:
     - Hacker News (structured scraping via Playwright)
     - Hackernoon tag pages (structured scraping via Playwright)
+    - GitHub Blog (structured scraping via Playwright)
     - Optional LLM-guided fallback browsing over arbitrary seed URLs.
   - Each source either has a `structuredIngestor` or is browsed via the LLM-driven fallback browser.
 - **Scraping & content signals:**
@@ -217,6 +218,8 @@ This file is intended to be read by the assistant at the start of each session t
   - Ingestion & sources
     - `HACKERNOON_TAG_URL` — override default Hackernoon tag page.
     - `HACKERNOON_SEED_URLS`, `HACKERNOON_DOMAIN_ALLOWLIST` — CSV lists for Hackernoon structured/fallback settings.
+    - `ENABLE_GITHUB_BLOG` — set to `'false'` to disable the GitHub Blog structured source.
+    - `GITHUB_BLOG_DOMAIN_ALLOWLIST` — optional CSV allowlist for GitHub Blog scraping (defaults to `github.blog`).
     - `FALLBACK_SEED_URLS`, `FALLBACK_DOMAIN_ALLOWLIST` — CSV lists for generic fallback browsing.
     - `FALLBACK_MAX_PAGES`, `FALLBACK_MAX_CLICKS`, `FALLBACK_MAX_DEPTH`, `FALLBACK_MAX_CANDIDATES`.
     - `FALLBACK_TIMEOUT_MS`, `FALLBACK_NAV_TIMEOUT_MS`, `FALLBACK_DECISION_TIMEOUT_MS`, `FALLBACK_USER_AGENT`.
