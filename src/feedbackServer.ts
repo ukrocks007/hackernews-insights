@@ -330,7 +330,7 @@ export async function startFeedbackServer(options: FeedbackServerOptions = {}): 
             }
 
             // Generate new TLDR
-            logger.info(`Generating TLDR for story ${storyId}: ${story.title}`);
+            logger.info(`Generating TLDR for story ${storyId}`);
             
             const { generateTLDRForURL } = await import('./tldrGenerator');
             const result = await generateTLDRForURL(story.url);

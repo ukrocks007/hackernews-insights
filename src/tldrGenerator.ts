@@ -41,7 +41,7 @@ export async function extractArticleContent(url: string): Promise<ExtractedArtic
     });
     
     // Block heavy resources for performance
-    await context.route('**/*.{png,jpg,jpeg,gif,webp,svg,woff,woff2,mp4,mp3,wav,flac}', route => route.abort());
+    await context.route('**/*.{png,jpg,jpeg,gif,webp,svg,woff,woff2,ttf,otf,mp4,mp3,wav,flac,avi,mov,webm,css}', route => route.abort());
 
     const page = await context.newPage();
     
@@ -70,7 +70,7 @@ export async function extractArticleContent(url: string): Promise<ExtractedArtic
     );
     
     // Extract paragraphs from article content
-    const paragraphs = await page.$$eval('article p, main p, .article p, .post-content p, .entry-content p, p', els => {
+    const paragraphs = await page.$$eval('article p, main p, .article p, .post-content p, .entry-content p', els => {
       return els.map(el => (el as HTMLElement).innerText.trim())
         .filter(t => t.length > 60)
         .slice(0, 50); // Limit number of paragraphs
@@ -211,7 +211,7 @@ function truncateToWords(text: string, maxWords: number): string {
 }
 
 /**
- * Generate a TLDR summary using Ollama's qwen3:1.7b model.
+ * Generate a TLDR summary using Ollama's qwen2.5:0.5b model.
  */
 export async function generateTLDR(article: ExtractedArticle): Promise<TLDRResult | null> {
   try {
