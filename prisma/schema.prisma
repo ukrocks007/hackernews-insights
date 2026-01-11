@@ -21,6 +21,10 @@ model Story {
   firstSeenAt      DateTime        @default(now()) @map("first_seen_at")
   lastNotifiedAt   DateTime?       @map("last_notified_at")
   suppressedUntil  DateTime?       @map("suppressed_until")
+  tldr             String?         // Generated TLDR summary
+  tldrGeneratedAt  DateTime?       @map("tldr_generated_at")
+  tldrModel        String?         @map("tldr_model")
+  tldrContentLength Int?           @map("tldr_content_length")
   feedbackEvents   FeedbackEvent[]
   storyTopics      StoryTopic[]
 
