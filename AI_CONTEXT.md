@@ -42,6 +42,15 @@ This file is intended to be read by the assistant at the start of each session t
 
 ## Dashboard UI & Review Workflow
 
+The dashboard is now implemented as a client-server architecture:
+
+- **Frontend**: Static HTML/CSS/JavaScript files served from `public/` directory
+  - `public/index.html`: Main dashboard page structure
+  - `public/styles.css`: All styling
+  - `public/script.js`: Client-side logic for filtering, pagination, and API interactions
+- **Backend**: HTTP server in `src/feedbackServer.ts` serving static files and APIs
+- **Data Flow**: Frontend fetches data from `/api/stories` and other endpoints using JavaScript
+
 ### Review State & Decision-Making
 The dashboard is designed as a **decision-making interface**, not a content browser. Its primary purpose is to surface items requiring human judgment and enable rapid review cycles.
 
@@ -296,33 +305,15 @@ Metadata is displayed inline within the list to aid decision-making without requ
 
 - `src/feedbackServer.ts`
   - Starts a small HTTP server unless `DISABLE_FEEDBACK_SERVER === 'true'`.
-  - Environment:
-    - `FEEDBACK_PORT` (default `3000`), `FEEDBACK_HOST` (default `0.0.0.0`).
-    - `FEEDBACK_TTL_HOURS` (TTL for link validity, default `36`).
-    - `FEEDBACK_SERVER_TTL_HOURS` (optional separate TTL for how long the server stays up).
-    - `FEEDBACK_ALLOW_ORIGIN` (CORS header, `*` by default).
-  - Endpoints:
-    - `GET /` — Renders the dashboard HTML via `renderHomePage()`.
-    - `GET /api/stories` — JSON pagination API used by the dashboard or external tooling.
-    - `GET /api/feedback` — Processes signed feedback links, verifies HMAC + TTL, records feedback, and returns a human-readable HTML response.
-    - `POST /api/trigger-fetch` — Mutex-guarded; kicks off `fetchAndFilterStories()` once and returns a JSON status (`ok` or `busy`).
-    - `POST /api/submit-feedback` — JSON endpoint for dashboard inline feedback; records feedback and returns updated relevance info.
+  - Serves static files: `public/index.html` for `/`, `public/styles.css` for `/styles.css`, `public/script.js` for `/script.js`.
+  - Environment: `FEEDBACK_PORT` (default `3000`), `FEEDBACK_HOST` (default `0.0.0.0`), `FEEDBACK_TTL_HOURS`, `FEEDBACK_SERVER_TTL_HOURS`, `FEEDBACK_ALLOW_ORIGIN`.
+  - Endpoints: `GET /` (static HTML), `GET /api/stories` (JSON), `GET /api/feedback`, `POST /api/trigger-fetch`, `POST /api/submit-feedback`, `POST /api/submit-rating`, `POST /api/generate-tldr`.
 
 - `src/dashboard.ts`
   - `getStoriesPaginated()` wraps Prisma for server-side pagination, status filtering, search, and sorting by `firstSeenAt`, `score`, `relevanceScore`, or `date`.
-  - **New filtering capabilities:**
-    - `rating`: Filter by review state (`unrated`, `all`, `useful`, `skip`, `bookmark`).
-    - `sources`: Array of source IDs to filter by (e.g., `['hackernews', 'github_blog']`).
-    - `topics`: Array of topic names to filter by (e.g., `['typescript', 'react']`).
-  - `extractSourceFromStoryId()` extracts the source identifier from story IDs (format: `source:id`).
+  - **Filtering capabilities:** `rating`, `sources`, `topics`.
+  - `extractSourceFromStoryId()` extracts the source identifier from story IDs.
   - Returns `PaginatedResult` including `availableSources` and `availableTopics` for building filter UI.
-  - `renderHomePage()` returns a single-page HTML dashboard with:
-    - **Review state emphasis:** Unrated items highlighted with yellow background, rated items visually receded with reduced opacity.
-    - **Multi-select filters:** Source and topic filters using chip/pill UI (top 20 topics shown).
-    - **Inline metadata:** Source tags, topics (limit 2-3), and match reason displayed in each row.
-    - **Rating actions:** Buttons for "useful" (✓), "skip" (✗), and "bookmark" (⭐) for unrated items; static display for rated items.
-    - Table of stories (HN score, rating badge, notification status, topics, first seen).
-    - A "Trigger Fetch" button that POSTs to `/api/trigger-fetch`.
   - `renderResponse()` renders a simple card-style HTML response for feedback outcomes.
 
 - `src/topicExtractor.ts`
@@ -338,15 +329,11 @@ Metadata is displayed inline within the list to aid decision-making without requ
 
 ## HTTP Endpoints Summary
 - `GET /`
-  - Renders the HTML dashboard with filters, pagination, a "Trigger Fetch" button, and inline rating controls.
-  - Query params: `page`, `limit`, `notificationSent`, `search`, `sortBy`, `sortOrder`, `rating`, `sources[]`, `topics[]`.
-  - New filtering capabilities:
-    - `rating`: Filter by review state (`unrated`, `all`, `useful`, `skip`, `bookmark`). Defaults to `unrated`.
-    - `sources[]`: Multi-select filter by source ID (e.g., `hackernews`, `github_blog`, `substack:username`).
-    - `topics[]`: Multi-select filter by topic name (e.g., `typescript`, `react`).
+  - Serves static HTML dashboard from `public/index.html`.
+  - Client-side JavaScript loads data from `/api/stories` and handles interactions.
 
 - `GET /api/stories`
-  - Returns paginated stories as JSON using the same filtering/sorting parameters as `/`.
+  - Returns paginated stories as JSON using the same filtering/sorting parameters as the dashboard.
   - Includes `availableSources` and `availableTopics` arrays in the response for building filter UI.
 
 - `GET /api/feedback`
@@ -411,7 +398,7 @@ Metadata is displayed inline within the list to aid decision-making without requ
     - `npm install`
     - `npx playwright install chromium`
     - `cp .env.example .env` (or `.env.local`) and fill in values.
-    - `npm run dev` — runs `src/index.ts`, which starts the feedback server + dashboard; trigger ingestion via the dashboard or `curl -X POST /api/trigger-fetch`.
+    - `npm run dev` — runs `src/index.ts`, which starts the feedback server serving static files from `public/` and APIs; trigger ingestion via the dashboard or `curl -X POST /api/trigger-fetch`.
   - Production / compiled binary:
     - `npm run build` (or `npm run package:*` targets) builds to `dist/` and/or standalone binaries.
     - `npm start` — runs `node dist/index.js` using the same environment.

@@ -1,9 +1,11 @@
 import http, { Server } from 'http';
 import { URL } from 'url';
+import fs from 'fs';
+import path from 'path';
 import { FeedbackAction, FeedbackConfidence, FeedbackSource, recordFeedbackEvent, toDisplayScore, verifyFeedbackSignature } from './feedback';
 import { disconnectPrisma, initPrisma } from './prismaClient';
 import { fetchAndFilterStories } from './insightTracker';
-import { getStoriesPaginated, renderHomePage, renderResponse } from './dashboard';
+import { getStoriesPaginated, renderResponse } from './dashboard';
 import logger from './logger';
 
 // Track running state for fetchAndFilterStories
@@ -41,45 +43,40 @@ export async function startFeedbackServer(options: FeedbackServerOptions = {}): 
         res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
       }
 
-      // Home page - Dashboard
-      if ((url.pathname === '/' || url.pathname === '') && req.method === 'GET') {
-        const page = Math.max(1, parseInt(url.searchParams.get('page') || '1', 10));
-        const limit = Math.min(100, Math.max(1, parseInt(url.searchParams.get('limit') || '20', 10)));
-        const notificationSentParam = url.searchParams.get('notificationSent');
-        const search = url.searchParams.get('search') || '';
-        const sortBy = (url.searchParams.get('sortBy') || 'firstSeenAt') as 'date' | 'score' | 'relevanceScore' | 'firstSeenAt';
-        const sortOrder = (url.searchParams.get('sortOrder') || 'desc') as 'asc' | 'desc';
-        const rating = url.searchParams.get('rating') || 'unrated';
-        const sources = url.searchParams.getAll('sources').filter(s => s);
-        const topics = url.searchParams.getAll('topics').filter(t => t);
-
-        let notificationSent: boolean | null = null;
-        if (notificationSentParam === 'true') notificationSent = true;
-        else if (notificationSentParam === 'false') notificationSent = false;
-
-        const data = await getStoriesPaginated({ 
-          page, 
-          limit, 
-          notificationSent, 
-          search, 
-          sortBy, 
-          sortOrder,
-          rating,
-          sources,
-          topics
+      // Serve static files
+      if (url.pathname === '/' && req.method === 'GET') {
+        const filePath = path.join(process.cwd(), 'public', 'index.html');
+        fs.readFile(filePath, 'utf8', (err, data) => {
+          if (err) {
+            res.writeHead(500, { 'Content-Type': 'text/plain' }).end('Internal Server Error');
+            return;
+          }
+          res.writeHead(200, { 'Content-Type': 'text/html' }).end(data);
         });
+        return;
+      }
 
-        res.writeHead(200, { 'Content-Type': 'text/html' }).end(
-          renderHomePage(data, {
-            notificationSent: notificationSentParam || '',
-            search,
-            sortBy,
-            sortOrder,
-            rating,
-            sources,
-            topics,
-          })
-        );
+      if (url.pathname === '/styles.css' && req.method === 'GET') {
+        const filePath = path.join(process.cwd(), 'public', 'styles.css');
+        fs.readFile(filePath, 'utf8', (err, data) => {
+          if (err) {
+            res.writeHead(500, { 'Content-Type': 'text/plain' }).end('Internal Server Error');
+            return;
+          }
+          res.writeHead(200, { 'Content-Type': 'text/css' }).end(data);
+        });
+        return;
+      }
+
+      if (url.pathname === '/script.js' && req.method === 'GET') {
+        const filePath = path.join(process.cwd(), 'public', 'script.js');
+        fs.readFile(filePath, 'utf8', (err, data) => {
+          if (err) {
+            res.writeHead(500, { 'Content-Type': 'text/plain' }).end('Internal Server Error');
+            return;
+          }
+          res.writeHead(200, { 'Content-Type': 'application/javascript' }).end(data);
+        });
         return;
       }
 
