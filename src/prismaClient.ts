@@ -1,12 +1,14 @@
-import fs from 'fs';
-import path from 'path';
-import { PrismaClient } from '@prisma/client';
+import fs from "fs";
+import path from "path";
+import { PrismaClient } from "@prisma/client";
 
 let prisma: PrismaClient | null = null;
 
 function resolveDatabaseUrl(): string {
-  const baseDir = (process as any).pkg ? path.dirname(process.execPath) : path.resolve(__dirname, '..');
-  const dbDir = path.join(baseDir, 'db');
+  const baseDir = (process as any).pkg
+    ? path.dirname(process.execPath)
+    : path.resolve(__dirname, "..");
+  const dbDir = path.join(baseDir, "db");
 
   if (!fs.existsSync(dbDir)) {
     fs.mkdirSync(dbDir, { recursive: true });
@@ -17,13 +19,16 @@ function resolveDatabaseUrl(): string {
     return configured;
   }
 
-  return `file:${path.join(dbDir, 'hn.sqlite')}`;
+  return `file:${path.join(dbDir, "hn.sqlite")}`;
 }
 
 export function getPrismaClient(): PrismaClient {
   if (!prisma) {
     const url = resolveDatabaseUrl();
-    if (!process.env.DATABASE_URL || process.env.DATABASE_URL.trim().length === 0) {
+    if (
+      !process.env.DATABASE_URL ||
+      process.env.DATABASE_URL.trim().length === 0
+    ) {
       process.env.DATABASE_URL = url;
     }
     prisma = new PrismaClient({

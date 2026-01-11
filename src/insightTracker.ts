@@ -1,13 +1,25 @@
-import { scrapeStoryContent, ContentSignals } from './contentScraper';
-import { INITIAL_RELEVANCE_SCORE, toDisplayScore } from './feedback';
-import { browseWithLLMFallback } from './fallbackBrowser';
-import logger from './logger';
-import { sendNotification, sendStoryNotification } from './notifier';
-import { MIN_HN_SCORE, checkRelevance } from './relevanceAgent';
-import { ScrapedStory } from './hnScraper';
-import { getSourceRegistry, HACKERNEWS_SOURCE_ID, NormalizedStoryCandidate, StructuredIngestOptions } from './sourceRegistry';
-import { hasStoryBeenProcessed, StoryInput, saveStory, getUnsentRelevantStories, markStoryAsSent, TopicInput } from './storage';
-import { extractTopics } from './topicExtractor';
+import { scrapeStoryContent, ContentSignals } from "./contentScraper";
+import { INITIAL_RELEVANCE_SCORE, toDisplayScore } from "./feedback";
+import { browseWithLLMFallback } from "./fallbackBrowser";
+import logger from "./logger";
+import { sendNotification, sendStoryNotification } from "./notifier";
+import { MIN_HN_SCORE, checkRelevance } from "./relevanceAgent";
+import { ScrapedStory } from "./hnScraper";
+import {
+  getSourceRegistry,
+  HACKERNEWS_SOURCE_ID,
+  NormalizedStoryCandidate,
+  StructuredIngestOptions,
+} from "./sourceRegistry";
+import {
+  hasStoryBeenProcessed,
+  StoryInput,
+  saveStory,
+  getUnsentRelevantStories,
+  markStoryAsSent,
+  TopicInput,
+} from "./storage";
+import { extractTopics } from "./topicExtractor";
 
 const CONTENT_BASED_WEIGHT_RATIO = 0.3;
 const METADATA_WEIGHT_RATIO = 0.15;
@@ -15,11 +27,11 @@ const METADATA_WEIGHT_RATIO = 0.15;
 function buildFallbackContent(storyTitle: string): ContentSignals {
   return {
     pageTitle: storyTitle,
-    description: '',
+    description: "",
     headings: [],
     paragraphs: [],
     hasCodeBlocks: false,
-    bodyText: '',
+    bodyText: "",
   };
 }
 
@@ -46,28 +58,37 @@ function resolveCandidateDate(candidate: NormalizedStoryCandidate): string {
   if (candidate.date) {
     const parsed = new Date(candidate.date);
     if (!isNaN(parsed.getTime())) {
-      return parsed.toISOString().split('T')[0];
+      return parsed.toISOString().split("T")[0];
     }
   }
-  return new Date().toISOString().split('T')[0];
+  return new Date().toISOString().split("T")[0];
 }
 
-async function processCandidate(candidate: NormalizedStoryCandidate): Promise<boolean> {
+async function processCandidate(
+  candidate: NormalizedStoryCandidate,
+): Promise<boolean> {
   const duplicate = await hasStoryBeenProcessed(candidate.id);
   if (duplicate) {
-    logger.info(`Story ${candidate.id} ("${candidate.title}") already processed. Skipping.`);
+    logger.info(
+      `Story ${candidate.id} ("${candidate.title}") already processed. Skipping.`,
+    );
     return false;
   }
 
   if (isBelowScoreThreshold(candidate)) {
-    logger.info(`Pre-filter: Rejected "${candidate.title}" (Score ${candidate.score} < ${MIN_HN_SCORE})`);
+    logger.info(
+      `Pre-filter: Rejected "${candidate.title}" (Score ${candidate.score} < ${MIN_HN_SCORE})`,
+    );
     return false;
   }
 
-  const content = candidate.content ?? (await scrapeStoryContent(candidate.url));
+  const content =
+    candidate.content ?? (await scrapeStoryContent(candidate.url));
 
   if (!content) {
-    logger.warn(`Skipping "${candidate.title}" (Content fetch failed or skipped)`);
+    logger.warn(
+      `Skipping "${candidate.title}" (Content fetch failed or skipped)`,
+    );
     return false;
   }
 
@@ -83,7 +104,10 @@ async function processCandidate(candidate: NormalizedStoryCandidate): Promise<bo
 
     const fullStory: StoryInput = {
       id: String(relevanceInput.id),
-      title: relevanceInput.title !== relevanceInput.url ? relevanceInput.title : pageTitle ?? relevanceInput.title,
+      title:
+        relevanceInput.title !== relevanceInput.url
+          ? relevanceInput.title
+          : (pageTitle ?? relevanceInput.title),
       url: relevanceInput.url,
       score: relevanceInput.score,
       rank: relevanceInput.rank,
@@ -101,7 +125,9 @@ async function processCandidate(candidate: NormalizedStoryCandidate): Promise<bo
   return false;
 }
 
-async function processCandidates(candidates: NormalizedStoryCandidate[]): Promise<number> {
+async function processCandidates(
+  candidates: NormalizedStoryCandidate[],
+): Promise<number> {
   let relevantStoriesFound = 0;
   for (const candidate of candidates) {
     const stored = await processCandidate(candidate);
@@ -112,7 +138,11 @@ async function processCandidates(candidates: NormalizedStoryCandidate[]): Promis
   return relevantStoriesFound;
 }
 
-async function runHackerNewsStructured(ingestor: (options?: StructuredIngestOptions) => Promise<NormalizedStoryCandidate[]>): Promise<number> {
+async function runHackerNewsStructured(
+  ingestor: (
+    options?: StructuredIngestOptions,
+  ) => Promise<NormalizedStoryCandidate[]>,
+): Promise<number> {
   let relevantStoriesFound = 0;
   let page = 1;
 
@@ -122,7 +152,7 @@ async function runHackerNewsStructured(ingestor: (options?: StructuredIngestOpti
     logger.info(`Scraped ${scrapedStories.length} stories from page ${page}.`);
 
     if (scrapedStories.length === 0) {
-      logger.info('No stories found on this page. Stopping.');
+      logger.info("No stories found on this page. Stopping.");
       break;
     }
 
@@ -131,8 +161,8 @@ async function runHackerNewsStructured(ingestor: (options?: StructuredIngestOpti
     if (relevantStoriesFound === 0) {
       page++;
       if (page <= MAX_HN_PAGES) {
-        logger.info('No relevant stories found yet. Moving to next page...');
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        logger.info("No relevant stories found yet. Moving to next page...");
+        await new Promise((resolve) => setTimeout(resolve, 2000));
       }
     }
   }
@@ -145,8 +175,11 @@ async function deliverNotifications() {
   logger.info(`Total unsent relevant stories in pool: ${unsentStories.length}`);
 
   if (unsentStories.length === 0) {
-    logger.info('No relevant stories to send.');
-    await sendNotification('No strong HN signals today.', 'HN Insights - Empty');
+    logger.info("No relevant stories to send.");
+    await sendNotification(
+      "No strong HN signals today.",
+      "HN Insights - Empty",
+    );
     return;
   }
 
@@ -155,11 +188,11 @@ async function deliverNotifications() {
 
   for (const story of topStories) {
     logger.info(
-      `Selected "${story.title}" (Relevance ${toDisplayScore(story.relevanceScore)}; Score ${story.score}); reason=${story.reason ?? 'N/A'}`
+      `Selected "${story.title}" (Relevance ${toDisplayScore(story.relevanceScore)}; Score ${story.score}); reason=${story.reason ?? "N/A"}`,
     );
     await sendStoryNotification(story);
     await markStoryAsSent(story.id);
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    await new Promise((resolve) => setTimeout(resolve, 1000));
   }
 }
 
@@ -169,18 +202,26 @@ async function fetchAndFilterStories() {
 
   for (const source of registry) {
     if (source.supportsStructuredIngest && source.structuredIngestor) {
-      logger.info(`[ingestion] ${source.sourceId}: using structured ingestor (code-first).`);
+      logger.info(
+        `[ingestion] ${source.sourceId}: using structured ingestor (code-first).`,
+      );
       if (source.sourceId === HACKERNEWS_SOURCE_ID) {
-        totalRelevant += await runHackerNewsStructured(source.structuredIngestor);
+        totalRelevant += await runHackerNewsStructured(
+          source.structuredIngestor,
+        );
       } else {
         const candidates = await source.structuredIngestor();
         totalRelevant += await processCandidates(candidates);
       }
     } else if (source.fallbackBrowsingAllowed) {
-      logger.info(`[ingestion] ${source.sourceId}: using fallback LLM-guided browsing.`);
+      logger.info(
+        `[ingestion] ${source.sourceId}: using fallback LLM-guided browsing.`,
+      );
       const seeds = source.seedUrls ?? [];
       if (seeds.length === 0) {
-        logger.warn(`[ingestion] ${source.sourceId}: fallback browsing enabled but no seed URLs provided. Skipping.`);
+        logger.warn(
+          `[ingestion] ${source.sourceId}: fallback browsing enabled but no seed URLs provided. Skipping.`,
+        );
         continue;
       }
 
@@ -191,12 +232,16 @@ async function fetchAndFilterStories() {
           domainAllowlist: source.domainAllowlist,
         });
         if (candidates.length === 0) {
-          logger.info(`[ingestion] ${source.sourceId}: no candidates surfaced from fallback browsing for ${seed}.`);
+          logger.info(
+            `[ingestion] ${source.sourceId}: no candidates surfaced from fallback browsing for ${seed}.`,
+          );
         }
         totalRelevant += await processCandidates(candidates);
       }
     } else {
-      logger.info(`[ingestion] ${source.sourceId}: no ingestion path available, skipping.`);
+      logger.info(
+        `[ingestion] ${source.sourceId}: no ingestion path available, skipping.`,
+      );
     }
   }
 

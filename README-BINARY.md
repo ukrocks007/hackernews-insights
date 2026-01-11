@@ -48,13 +48,15 @@ If you try to run `npm run package` on macOS, the resulting binary might fail on
 
 4.  **Install Playwright Browsers**:
     The binary does **not** include the web browsers required by Playwright. You need to install them on the Pi.
-    
+
     If you have `node` installed on the Pi:
+
     ```bash
     npx playwright install chromium
     ```
-    
+
     Or install system dependencies if needed:
+
     ```bash
     npx playwright install-deps chromium
     ```
@@ -66,8 +68,8 @@ If you try to run `npm run package` on macOS, the resulting binary might fail on
 
 ## Troubleshooting
 
--   **Sqlite3 Error**: If you see an error like `Error: Cannot find module .../node_sqlite3.node`, it means the native binding was not included or is for the wrong architecture. **Recommended solution:** Use the local build approach with the install script from the main README instead of the binary approach.
--   **Playwright Error**: If it complains about missing browsers, ensure you've run `npx playwright install`.
+- **Sqlite3 Error**: If you see an error like `Error: Cannot find module .../node_sqlite3.node`, it means the native binding was not included or is for the wrong architecture. **Recommended solution:** Use the local build approach with the install script from the main README instead of the binary approach.
+- **Playwright Error**: If it complains about missing browsers, ensure you've run `npx playwright install`.
 
 ## Recommended Alternative
 

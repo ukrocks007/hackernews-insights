@@ -11,6 +11,7 @@ curl -sSL https://raw.githubusercontent.com/ukrocks007/hackernews-insights/main/
 ```
 
 The installer will:
+
 - Install Node.js 20 and build tools (if needed)
 - Clone the repository and build locally (solves native module compatibility issues)
 - Install Playwright browsers
@@ -53,17 +54,20 @@ curl -sSL https://raw.githubusercontent.com/ukrocks007/hackernews-insights/main/
 ## Setup
 
 1.  **Install Dependencies**:
+
     ```bash
     npm install
     npx playwright install chromium
     ```
 
 2.  **Configuration**:
+
 - Copy `.env` example:
   ```bash
   cp .env.example .env
   ```
 - Edit `.env` with your details:
+
   ```env
   OLLAMA_BASE_URL=http://localhost:11434
   OLLAMA_MODEL=functiongemma
@@ -74,33 +78,38 @@ curl -sSL https://raw.githubusercontent.com/ukrocks007/hackernews-insights/main/
   FEEDBACK_PORT=3000
   FEEDBACK_TTL_HOURS=36
   HEADLESS=true
-  
+
   # Optional: Configure additional content sources
   ENABLE_GITHUB_BLOG=true
   ENABLE_ADDY_OSMANI_BLOG=true
   SUBSTACK_USERNAMES=addyo,example  # CSV list of Substack usernames
   ```
+
   - Edit `config/interests.json` to define your topics of interest.
   - If you deploy the feedback endpoint, expose `FEEDBACK_BASE_URL` so that Pushover links resolve back to your device.
 
 3.  **Build**:
-  ```bash
-  npm run build
-  ```
+
+```bash
+npm run build
+```
 
 4.  **Sync Database Schema (Prisma + SQLite)**:
-   ```bash
-   npm run prisma:deploy
-   ```
+
+```bash
+npm run prisma:deploy
+```
 
 ## Running Locally
 
 To run the agent once (development mode):
+
 ```bash
 npm run dev
 ```
 
 To run the built version:
+
 ```bash
 npm start
 ```
@@ -110,11 +119,13 @@ npm start
 To run this automatically every day at 8:00 AM:
 
 1.  Build the project:
+
     ```bash
     npm run build
     ```
 
 2.  Open crontab:
+
     ```bash
     crontab -e
     ```

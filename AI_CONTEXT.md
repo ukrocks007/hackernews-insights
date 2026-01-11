@@ -5,6 +5,7 @@ This file is intended to be read by the assistant at the start of each session t
 ---
 
 ## Project Overview
+
 - Name: `hackernews-insights`
 - Purpose: Continuously discover, filter, and notify on highly relevant engineering/AI/startup stories using:
   - deterministic scraping (Hacker News + Hackernoon tags),
@@ -17,25 +18,27 @@ This file is intended to be read by the assistant at the start of each session t
   - Storage and persistence use Prisma + SQLite (`prisma/schema.prisma`, `src/prismaClient.ts`, `src/storage.ts`).
 
 ## High-level Architecture
-  - `src/sourceRegistry.ts` defines all sources via `SourceCapability`:
-    - Hacker News (structured scraping via Playwright)
-    - Hackernoon tag pages (structured scraping via Playwright)
-    - GitHub Blog (structured scraping via Playwright)
-    - Substack (generic, config-driven for multiple authors via Playwright)
-    - Addy Osmani Blog (structured scraping via Playwright)
-    - Optional LLM-guided fallback browsing over arbitrary seed URLs.
-  - Each source either has a `structuredIngestor` or is browsed via the LLM-driven fallback browser.
-  - `src/hnScraper.ts`, `src/hackernoonScraper.ts` scrape candidate stories.
-  - `src/contentScraper.ts` turns article pages into structured `ContentSignals` (titles, headings, paragraphs, body text, code-block presence).
-  - `src/relevanceAgent.ts` calls Ollama chat (`/api/chat`) with a tool-call style interface (`save_story`) to decide if a story is relevant and why.
-  - `src/fallbackBrowser.ts` uses Playwright plus a small LLM model to drive constrained crawling within an allowlisted domain and surface candidate stories.
-  - `src/storage.ts` wraps Prisma for stories, relevance scores, topic associations, and suppression state.
-  - `src/topicExtractor.ts` implements deterministic topic extraction from title/url/content; `Topic` and `StoryTopic` are modeled in Prisma.
-  - `src/notifier.ts` sends Pushover notifications for top stories and can include signed feedback links.
-  - `src/feedback.ts` signs/validates feedback links (HMAC), persists feedback events, recomputes relevance, and updates topic scores.
-  - `src/feedbackServer.ts` + `src/dashboard.ts` expose `/`, `/api/feedback`, `/api/trigger-fetch`, `/api/stories`, `/api/submit-feedback`, `/api/submit-rating`.
+
+- `src/sourceRegistry.ts` defines all sources via `SourceCapability`:
+  - Hacker News (structured scraping via Playwright)
+  - Hackernoon tag pages (structured scraping via Playwright)
+  - GitHub Blog (structured scraping via Playwright)
+  - Substack (generic, config-driven for multiple authors via Playwright)
+  - Addy Osmani Blog (structured scraping via Playwright)
+  - Optional LLM-guided fallback browsing over arbitrary seed URLs.
+- Each source either has a `structuredIngestor` or is browsed via the LLM-driven fallback browser.
+- `src/hnScraper.ts`, `src/hackernoonScraper.ts` scrape candidate stories.
+- `src/contentScraper.ts` turns article pages into structured `ContentSignals` (titles, headings, paragraphs, body text, code-block presence).
+- `src/relevanceAgent.ts` calls Ollama chat (`/api/chat`) with a tool-call style interface (`save_story`) to decide if a story is relevant and why.
+- `src/fallbackBrowser.ts` uses Playwright plus a small LLM model to drive constrained crawling within an allowlisted domain and surface candidate stories.
+- `src/storage.ts` wraps Prisma for stories, relevance scores, topic associations, and suppression state.
+- `src/topicExtractor.ts` implements deterministic topic extraction from title/url/content; `Topic` and `StoryTopic` are modeled in Prisma.
+- `src/notifier.ts` sends Pushover notifications for top stories and can include signed feedback links.
+- `src/feedback.ts` signs/validates feedback links (HMAC), persists feedback events, recomputes relevance, and updates topic scores.
+- `src/feedbackServer.ts` + `src/dashboard.ts` expose `/`, `/api/feedback`, `/api/trigger-fetch`, `/api/stories`, `/api/submit-feedback`, `/api/submit-rating`.
 
 ## Dashboard UI & Review Workflow
+
     - Jan 2026: TLDR prompt size reduced and content selection optimized for faster LLM inference
 
 The dashboard is now implemented as a client-server architecture:
@@ -48,6 +51,7 @@ The dashboard is now implemented as a client-server architecture:
 - **Data Flow**: Frontend fetches data from `/api/stories` and other endpoints using JavaScript
 
 ### Review State & Decision-Making
+
 The dashboard is designed as a **decision-making interface**, not a content browser. Its primary purpose is to surface items requiring human judgment and enable rapid review cycles.
 
 - **Rating states:**
@@ -59,6 +63,7 @@ The dashboard is designed as a **decision-making interface**, not a content brow
 - **Rated items:** Visually recede with reduced opacity, allowing users to focus on pending decisions.
 
 ### Filtering Philosophy
+
 The UI provides **composable, fast filters** to help users focus their attention:
 
 1. **Review Status Filter:**
@@ -84,6 +89,7 @@ The UI provides **composable, fast filters** to help users focus their attention
    - Sort order: Ascending or Descending
 
 ### Metadata Presentation
+
 Metadata is displayed inline within the list to aid decision-making without requiring additional clicks:
 
 - **Source tag:** Compact colored badge showing content origin (e.g., `HACKERNEWS`, `GITHUB_BLOG`)
@@ -94,6 +100,7 @@ Metadata is displayed inline within the list to aid decision-making without requ
 - **TLDR button:** Inline button (📄 TLDR) appears for stories with URLs, enabling on-demand article summarization
 
 ### TLDR Feature (User-Initiated Summarization)
+
 - **Purpose:** Help users quickly decide whether to read a full article by providing a concise technical summary
 - **Trigger:** User clicks the "📄 TLDR" button next to a story
 - **UI Flow:**
@@ -105,12 +112,14 @@ Metadata is displayed inline within the list to aid decision-making without requ
 - **Integration:** Fully asynchronous, non-blocking, operates independently of review/rating workflow
 
 ### Why Scoring is NOT Shown Prominently
+
 - **Relevance scores** are internal signals used for ranking and suppression.
 - The UI does **not** display raw scores or confidence values to users in the main list.
 - Users make decisions based on **title, source, topics, and match reason**, not numerical scores.
 - This prevents users from over-relying on algorithmic judgments and ensures human agency in review.
 
 ### Metadata Precomputation & No Live Inference
+
 - **All metadata is precomputed** during ingestion:
   - Topics are extracted via deterministic heuristics in `topicExtractor.ts`
   - Match reasons come from the LLM during relevance checking (`relevanceAgent.ts`)
@@ -125,6 +134,7 @@ Metadata is displayed inline within the list to aid decision-making without requ
 ## Important Files & Responsibilities
 
 ### Core runtime
+
 - `src/index.ts`
   - Entrypoint (`npm run dev` and `npm start` resolve here via TS/compiled JS).
   - Initializes the database via `initDB()` from `src/storage.ts`.
@@ -143,6 +153,7 @@ Metadata is displayed inline within the list to aid decision-making without requ
   - After ingestion, calls `getUnsentRelevantStories()`, ranks by relevance/score, and sends up to 5 notifications via `sendStoryNotification`, marking them as sent.
 
 ### Scrapers & multi-source registry
+
 - `src/sourceRegistry.ts`
   - Declares `SourceCapability`, `StructuredIngestor`, and `NormalizedStoryCandidate`.
   - `getSourceRegistry()` returns the ordered list of sources:
@@ -193,6 +204,7 @@ Metadata is displayed inline within the list to aid decision-making without requ
   - Aggressively blocks heavy assets for speed; honors `HEADLESS`.
 
 ### LLM integration & fallback browsing
+
 - `src/relevanceAgent.ts`
   - Loads `OLLAMA_BASE_URL` and `OLLAMA_MODEL` (defaults to `http://localhost:11434` and `functiongemma`).
   - Reads user interests from `config/interests.json` (either beside the compiled binary or in `config/` during development).
@@ -246,6 +258,7 @@ Metadata is displayed inline within the list to aid decision-making without requ
     - Single-threaded execution (no parallel TLDR jobs)
 
 ### Storage & database access
+
 - `prisma/schema.prisma`
   - `Story` (table `stories`):
     - `id` (string, HN id or deterministic hash), `title`, optional `url`, `score`, `rank`, `date` (YYYY-MM-DD string), `reason`.
@@ -280,6 +293,7 @@ Metadata is displayed inline within the list to aid decision-making without requ
   - Type export: `StoryRating = 'useful' | 'skip' | 'bookmark' | null`.
 
 ### Feedback, scoring, and dashboard
+
 - `src/feedback.ts`
   - Types: `FeedbackAction` (`LIKE`, `DISLIKE`, `SAVE`, `OPENED`, `IGNORED`), `FeedbackConfidence` (`explicit`, `implicit`), `FeedbackSource` (`pushover`, `system`, `dashboard`).
   - Link signing:
@@ -324,6 +338,7 @@ Metadata is displayed inline within the list to aid decision-making without requ
   - Uses ISO timestamps for consistency across environments.
 
 ## HTTP Endpoints Summary
+
 - `GET /`
   - Serves static HTML dashboard from `public/index.html`.
   - Client-side JavaScript loads data from `/api/stories` and handles interactions.
@@ -364,6 +379,7 @@ Metadata is displayed inline within the list to aid decision-making without requ
   - Expected latency: 10-30 seconds for new generation.
 
 ## Environment & Running
+
 - Environment variables
   - General / LLM
     - `OLLAMA_BASE_URL` — base URL for Ollama (default `http://localhost:11434`).
@@ -410,6 +426,7 @@ Metadata is displayed inline within the list to aid decision-making without requ
     - `npm run prisma:deploy` — apply migrations or push schema in environments without migration history.
 
 ## Coding Conventions / Rules for the Assistant
+
 1. Use existing project patterns: prefer `logger` over `console`, and use `async/await` consistently.
 2. Keep edits minimal and focused: change only the files necessary for the task and avoid opportunistic refactors.
 3. When adding imports, use relative paths consistent with nearby files; do not introduce new external dependencies unless explicitly requested.
@@ -420,15 +437,18 @@ Metadata is displayed inline within the list to aid decision-making without requ
    - Respect the single-run guard around `/api/trigger-fetch`.
 
 ## Logging & Errors
+
 - Use `logger.info`, `logger.warn`, `logger.error` for messages; do **not** add raw `console.*` in source files.
 - Prefer structured, contextual log messages (include story IDs, source IDs, and URLs where useful) but avoid logging secrets.
 
 ## Security & Secrets
+
 - Do not expose secrets (tokens, feedback HMAC secrets, database URLs with credentials) in commits, logs, or error messages.
 - Always rely on environment variables and `.env`/`.env.local`; direct users to update those files for local testing.
 - Treat `FEEDBACK_SECRET` as the primary HMAC key and avoid reusing Pushover credentials elsewhere.
 
 ## Assistant-specific Instruction
+
 - Read this file at the start of every session.
 - When proposing code changes, always summarize which files you touched and why in the final message.
 - For multi-step changes, create a short todo list and mark progress.

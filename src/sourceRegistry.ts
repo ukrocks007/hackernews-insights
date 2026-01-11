@@ -1,15 +1,18 @@
-import { createHash } from 'crypto';
-import { scrapeTopStories, ScrapedStory } from './hnScraper';
-import { scrapeTaggedStories } from './hackernoonScraper';
-import { scrapeGithubBlogPosts, GithubBlogItem } from './githubBlogScraper';
-import { scrapeSubstackArchive, SubstackItem } from './substackScraper';
-import { scrapeAddyOsmaniBlog, AddyOsmaniBlogItem } from './addyOsmaniBlogScraper';
-import logger from './logger';
-import { ContentSignals } from './contentScraper';
+import { createHash } from "crypto";
+import { scrapeTopStories, ScrapedStory } from "./hnScraper";
+import { scrapeTaggedStories } from "./hackernoonScraper";
+import { scrapeGithubBlogPosts, GithubBlogItem } from "./githubBlogScraper";
+import { scrapeSubstackArchive, SubstackItem } from "./substackScraper";
+import {
+  scrapeAddyOsmaniBlog,
+  AddyOsmaniBlogItem,
+} from "./addyOsmaniBlogScraper";
+import logger from "./logger";
+import { ContentSignals } from "./contentScraper";
 
-export const HACKERNEWS_SOURCE_ID = 'hackernews';
-export const GITHUB_BLOG_SOURCE_ID = 'github_blog';
-export const ADDY_OSMANI_BLOG_SOURCE_ID = 'addy_osmani_blog';
+export const HACKERNEWS_SOURCE_ID = "hackernews";
+export const GITHUB_BLOG_SOURCE_ID = "github_blog";
+export const ADDY_OSMANI_BLOG_SOURCE_ID = "addy_osmani_blog";
 
 export interface NormalizedStoryCandidate {
   id: string;
@@ -27,7 +30,9 @@ export interface StructuredIngestOptions {
   limit?: number;
 }
 
-export type StructuredIngestor = (options?: StructuredIngestOptions) => Promise<NormalizedStoryCandidate[]>;
+export type StructuredIngestor = (
+  options?: StructuredIngestOptions,
+) => Promise<NormalizedStoryCandidate[]>;
 
 export interface SourceCapability {
   sourceId: string;
@@ -38,7 +43,9 @@ export interface SourceCapability {
   seedUrls?: string[];
 }
 
-function normalizeHackerNewsStory(story: ScrapedStory): NormalizedStoryCandidate {
+function normalizeHackerNewsStory(
+  story: ScrapedStory,
+): NormalizedStoryCandidate {
   return {
     id: `hackernews:${story.id}`,
     title: story.title,
@@ -49,34 +56,49 @@ function normalizeHackerNewsStory(story: ScrapedStory): NormalizedStoryCandidate
   };
 }
 
-export async function ingestHackerNewsStructured(options?: StructuredIngestOptions): Promise<NormalizedStoryCandidate[]> {
+export async function ingestHackerNewsStructured(
+  options?: StructuredIngestOptions,
+): Promise<NormalizedStoryCandidate[]> {
   const page = options?.page ?? 1;
   const limit = options?.limit ?? 30;
   const stories = await scrapeTopStories(limit, page);
-  logger.info(`Structured ingest [hackernews]: fetched ${stories.length} candidates from page ${page}`);
+  logger.info(
+    `Structured ingest [hackernews]: fetched ${stories.length} candidates from page ${page}`,
+  );
   return stories.map(normalizeHackerNewsStory);
 }
 
-function normalizeHackernoonStoryFromItem(item: { title: string; url: string }): NormalizedStoryCandidate {
+function normalizeHackernoonStoryFromItem(item: {
+  title: string;
+  url: string;
+}): NormalizedStoryCandidate {
   return {
-    id: deriveStoryIdFromUrl(item.url, 'hackernoon'),
+    id: deriveStoryIdFromUrl(item.url, "hackernoon"),
     title: item.title,
     url: item.url,
-    sourceId: 'hackernoon',
+    sourceId: "hackernoon",
   };
 }
 
-export async function ingestHackernoonStructured(options?: StructuredIngestOptions): Promise<NormalizedStoryCandidate[]> {
+export async function ingestHackernoonStructured(
+  options?: StructuredIngestOptions,
+): Promise<NormalizedStoryCandidate[]> {
   const page = options?.page ?? 1;
   const limit = options?.limit ?? 30;
-  const tagUrl = process.env.HACKERNOON_TAG_URL || 'https://hackernoon.com/tagged/hackernoon-top-story';
-  logger.info(`Structured ingest [hackernoon]: scraping ${tagUrl} page ${page}`);
+  const tagUrl =
+    process.env.HACKERNOON_TAG_URL ||
+    "https://hackernoon.com/tagged/hackernoon-top-story";
+  logger.info(
+    `Structured ingest [hackernoon]: scraping ${tagUrl} page ${page}`,
+  );
   const items = await scrapeTaggedStories(tagUrl, limit, page);
   return items.map(normalizeHackernoonStoryFromItem);
 }
 
-function normalizeGithubBlogItem(item: GithubBlogItem): NormalizedStoryCandidate {
-  const description = item.excerpt ?? '';
+function normalizeGithubBlogItem(
+  item: GithubBlogItem,
+): NormalizedStoryCandidate {
+  const description = item.excerpt ?? "";
   const fallbackContent: ContentSignals = {
     pageTitle: item.title,
     description,
@@ -96,16 +118,25 @@ function normalizeGithubBlogItem(item: GithubBlogItem): NormalizedStoryCandidate
   };
 }
 
-export async function ingestGithubBlogStructured(options?: StructuredIngestOptions): Promise<NormalizedStoryCandidate[]> {
+export async function ingestGithubBlogStructured(
+  options?: StructuredIngestOptions,
+): Promise<NormalizedStoryCandidate[]> {
   const limit = options?.limit ?? 30;
-  logger.info(`Structured ingest [${GITHUB_BLOG_SOURCE_ID}]: scraping GitHub Blog homepage`);
+  logger.info(
+    `Structured ingest [${GITHUB_BLOG_SOURCE_ID}]: scraping GitHub Blog homepage`,
+  );
   const items = await scrapeGithubBlogPosts(limit);
-  logger.info(`Structured ingest [${GITHUB_BLOG_SOURCE_ID}]: fetched ${items.length} candidates`);
+  logger.info(
+    `Structured ingest [${GITHUB_BLOG_SOURCE_ID}]: fetched ${items.length} candidates`,
+  );
   return items.map(normalizeGithubBlogItem);
 }
 
-function normalizeSubstackItem(item: SubstackItem, username: string): NormalizedStoryCandidate {
-  const description = item.excerpt ?? '';
+function normalizeSubstackItem(
+  item: SubstackItem,
+  username: string,
+): NormalizedStoryCandidate {
+  const description = item.excerpt ?? "";
   const fallbackContent: ContentSignals = {
     pageTitle: item.title,
     description,
@@ -130,17 +161,25 @@ function normalizeSubstackItem(item: SubstackItem, username: string): Normalized
  * This allows multiple Substack authors to be configured without new code.
  */
 export function createSubstackIngestor(username: string): StructuredIngestor {
-  return async (options?: StructuredIngestOptions): Promise<NormalizedStoryCandidate[]> => {
+  return async (
+    options?: StructuredIngestOptions,
+  ): Promise<NormalizedStoryCandidate[]> => {
     const limit = options?.limit ?? 30;
-    logger.info(`Structured ingest [substack:${username}]: scraping Substack archive`);
+    logger.info(
+      `Structured ingest [substack:${username}]: scraping Substack archive`,
+    );
     const items = await scrapeSubstackArchive(username, limit);
-    logger.info(`Structured ingest [substack:${username}]: fetched ${items.length} candidates`);
-    return items.map(item => normalizeSubstackItem(item, username));
+    logger.info(
+      `Structured ingest [substack:${username}]: fetched ${items.length} candidates`,
+    );
+    return items.map((item) => normalizeSubstackItem(item, username));
   };
 }
 
-function normalizeAddyOsmaniBlogItem(item: AddyOsmaniBlogItem): NormalizedStoryCandidate {
-  const description = item.excerpt ?? '';
+function normalizeAddyOsmaniBlogItem(
+  item: AddyOsmaniBlogItem,
+): NormalizedStoryCandidate {
+  const description = item.excerpt ?? "";
   const fallbackContent: ContentSignals = {
     pageTitle: item.title,
     description,
@@ -160,26 +199,32 @@ function normalizeAddyOsmaniBlogItem(item: AddyOsmaniBlogItem): NormalizedStoryC
   };
 }
 
-export async function ingestAddyOsmaniBlogStructured(options?: StructuredIngestOptions): Promise<NormalizedStoryCandidate[]> {
+export async function ingestAddyOsmaniBlogStructured(
+  options?: StructuredIngestOptions,
+): Promise<NormalizedStoryCandidate[]> {
   const limit = options?.limit ?? 30;
-  logger.info(`Structured ingest [${ADDY_OSMANI_BLOG_SOURCE_ID}]: scraping Addy Osmani blog`);
+  logger.info(
+    `Structured ingest [${ADDY_OSMANI_BLOG_SOURCE_ID}]: scraping Addy Osmani blog`,
+  );
   const items = await scrapeAddyOsmaniBlog(limit);
-  logger.info(`Structured ingest [${ADDY_OSMANI_BLOG_SOURCE_ID}]: fetched ${items.length} candidates`);
+  logger.info(
+    `Structured ingest [${ADDY_OSMANI_BLOG_SOURCE_ID}]: fetched ${items.length} candidates`,
+  );
   return items.map(normalizeAddyOsmaniBlogItem);
 }
 
 // Uses the first 44 bits of a SHA-256 digest to stay within JS safe integer range while keeping IDs deterministic.
 export function deriveStoryIdFromUrl(url: string, source?: string): string {
-  const hash = createHash('sha256').update(url).digest('hex').slice(0, 12);
-  const prefix = source ? source.replace(/[^a-z0-9_-]/gi, '') : 'url';
+  const hash = createHash("sha256").update(url).digest("hex").slice(0, 12);
+  const prefix = source ? source.replace(/[^a-z0-9_-]/gi, "") : "url";
   return `${prefix}:${hash}`;
 }
 
 function parseCsvEnv(value: string | undefined): string[] {
   if (!value) return [];
   return value
-    .split(',')
-    .map(item => item.trim())
+    .split(",")
+    .map((item) => item.trim())
     .filter(Boolean);
 }
 
@@ -187,22 +232,28 @@ export function getSourceRegistry(): SourceCapability[] {
   const fallbackSeeds = parseCsvEnv(process.env.FALLBACK_SEED_URLS);
   const fallbackAllowlist = parseCsvEnv(process.env.FALLBACK_DOMAIN_ALLOWLIST);
   const hackernoonSeeds = parseCsvEnv(process.env.HACKERNOON_SEED_URLS);
-  const hackernoonAllowlist = parseCsvEnv(process.env.HACKERNOON_DOMAIN_ALLOWLIST);
-  const githubBlogAllowlist = parseCsvEnv(process.env.GITHUB_BLOG_DOMAIN_ALLOWLIST);
-  const githubBlogEnabled = (process.env.ENABLE_GITHUB_BLOG ?? 'true') !== 'false';
+  const hackernoonAllowlist = parseCsvEnv(
+    process.env.HACKERNOON_DOMAIN_ALLOWLIST,
+  );
+  const githubBlogAllowlist = parseCsvEnv(
+    process.env.GITHUB_BLOG_DOMAIN_ALLOWLIST,
+  );
+  const githubBlogEnabled =
+    (process.env.ENABLE_GITHUB_BLOG ?? "true") !== "false";
   const substackUsernames = parseCsvEnv(process.env.SUBSTACK_USERNAMES);
-  const addyOsmaniBlogEnabled = (process.env.ENABLE_ADDY_OSMANI_BLOG ?? 'true') !== 'false';
+  const addyOsmaniBlogEnabled =
+    (process.env.ENABLE_ADDY_OSMANI_BLOG ?? "true") !== "false";
 
   const hackerNews: SourceCapability = {
     sourceId: HACKERNEWS_SOURCE_ID,
     supportsStructuredIngest: true,
     structuredIngestor: ingestHackerNewsStructured,
     fallbackBrowsingAllowed: false,
-    domainAllowlist: ['news.ycombinator.com'],
+    domainAllowlist: ["news.ycombinator.com"],
   };
 
   const fallbackBrowsing: SourceCapability = {
-    sourceId: 'fallback-browse',
+    sourceId: "fallback-browse",
     supportsStructuredIngest: false,
     fallbackBrowsingAllowed: true,
     domainAllowlist: fallbackAllowlist,
@@ -210,12 +261,16 @@ export function getSourceRegistry(): SourceCapability[] {
   };
 
   const hackernoon: SourceCapability = {
-    sourceId: 'hackernoon',
+    sourceId: "hackernoon",
     supportsStructuredIngest: true,
     structuredIngestor: ingestHackernoonStructured,
     fallbackBrowsingAllowed: true,
-    domainAllowlist: hackernoonAllowlist.length ? hackernoonAllowlist : ['hackernoon.com'],
-    seedUrls: hackernoonSeeds.length ? hackernoonSeeds : ['https://hackernoon.com/tagged/hackernoon-top-story'],
+    domainAllowlist: hackernoonAllowlist.length
+      ? hackernoonAllowlist
+      : ["hackernoon.com"],
+    seedUrls: hackernoonSeeds.length
+      ? hackernoonSeeds
+      : ["https://hackernoon.com/tagged/hackernoon-top-story"],
   };
 
   const githubBlog: SourceCapability = {
@@ -223,7 +278,9 @@ export function getSourceRegistry(): SourceCapability[] {
     supportsStructuredIngest: true,
     structuredIngestor: ingestGithubBlogStructured,
     fallbackBrowsingAllowed: false,
-    domainAllowlist: githubBlogAllowlist.length ? githubBlogAllowlist : ['github.blog', 'www.github.blog'],
+    domainAllowlist: githubBlogAllowlist.length
+      ? githubBlogAllowlist
+      : ["github.blog", "www.github.blog"],
   };
 
   const addyOsmaniBlog: SourceCapability = {
@@ -231,21 +288,25 @@ export function getSourceRegistry(): SourceCapability[] {
     supportsStructuredIngest: true,
     structuredIngestor: ingestAddyOsmaniBlogStructured,
     fallbackBrowsingAllowed: false,
-    domainAllowlist: ['addyosmani.com', 'www.addyosmani.com'],
+    domainAllowlist: ["addyosmani.com", "www.addyosmani.com"],
   };
 
   const registry: SourceCapability[] = [];
-  
+
   if (githubBlogEnabled) {
     registry.push(githubBlog);
   } else {
-    logger.info(`[ingestion] ${GITHUB_BLOG_SOURCE_ID}: disabled via ENABLE_GITHUB_BLOG=false`);
+    logger.info(
+      `[ingestion] ${GITHUB_BLOG_SOURCE_ID}: disabled via ENABLE_GITHUB_BLOG=false`,
+    );
   }
 
   if (addyOsmaniBlogEnabled) {
     registry.push(addyOsmaniBlog);
   } else {
-    logger.info(`[ingestion] ${ADDY_OSMANI_BLOG_SOURCE_ID}: disabled via ENABLE_ADDY_OSMANI_BLOG=false`);
+    logger.info(
+      `[ingestion] ${ADDY_OSMANI_BLOG_SOURCE_ID}: disabled via ENABLE_ADDY_OSMANI_BLOG=false`,
+    );
   }
 
   // Register Substack sources for each configured username
@@ -258,7 +319,9 @@ export function getSourceRegistry(): SourceCapability[] {
       domainAllowlist: [`${username}.substack.com`],
     };
     registry.push(substackSource);
-    logger.info(`[ingestion] Registered Substack source for username: ${username}`);
+    logger.info(
+      `[ingestion] Registered Substack source for username: ${username}`,
+    );
   }
 
   registry.push(hackernoon, hackerNews, fallbackBrowsing);

@@ -1,12 +1,12 @@
-import { getPrismaClient } from './prismaClient';
+import { getPrismaClient } from "./prismaClient";
 
 interface StoriesQueryParams {
   page: number;
   limit: number;
   notificationSent?: boolean | null;
   search?: string;
-  sortBy?: 'date' | 'score' | 'relevanceScore' | 'firstSeenAt';
-  sortOrder?: 'asc' | 'desc';
+  sortBy?: "date" | "score" | "relevanceScore" | "firstSeenAt";
+  sortOrder?: "asc" | "desc";
   rating?: string | null; // "unrated", "useful", "skip", "bookmark", "all"
   sources?: string[]; // Filter by source IDs
   topics?: string[]; // Filter by topic names
@@ -43,39 +43,41 @@ interface PaginatedResult {
 function extractSourceFromStoryId(storyId: string): string {
   // Story IDs are in format "source:id" or "source_variant:id"
   const match = storyId.match(/^([^:]+):/);
-  return match ? match[1] : 'unknown';
+  return match ? match[1] : "unknown";
 }
 
-export async function getStoriesPaginated(params: StoriesQueryParams): Promise<PaginatedResult> {
+export async function getStoriesPaginated(
+  params: StoriesQueryParams,
+): Promise<PaginatedResult> {
   const prisma = getPrismaClient();
-  const { 
-    page, 
-    limit, 
-    notificationSent, 
-    search, 
-    sortBy = 'firstSeenAt', 
-    sortOrder = 'desc',
+  const {
+    page,
+    limit,
+    notificationSent,
+    search,
+    sortBy = "firstSeenAt",
+    sortOrder = "desc",
     rating,
     sources = [],
-    topics = []
+    topics = [],
   } = params;
   const skip = (page - 1) * limit;
 
   const where: Record<string, unknown> = {};
-  
+
   if (notificationSent !== null && notificationSent !== undefined) {
     where.notificationSent = notificationSent;
   }
-  
+
   if (search) {
     where.title = { contains: search };
   }
 
   // Rating filter
-  if (rating && rating !== 'all') {
-    if (rating === 'unrated') {
+  if (rating && rating !== "all") {
+    if (rating === "unrated") {
       where.rating = null;
-    } else if (['useful', 'skip', 'bookmark'].includes(rating)) {
+    } else if (["useful", "skip", "bookmark"].includes(rating)) {
       where.rating = rating;
     }
   }
@@ -90,9 +92,9 @@ export async function getStoriesPaginated(params: StoriesQueryParams): Promise<P
     where.storyTopics = {
       some: {
         topic: {
-          name: { in: topics }
-        }
-      }
+          name: { in: topics },
+        },
+      },
     };
   }
 
@@ -114,19 +116,19 @@ export async function getStoriesPaginated(params: StoriesQueryParams): Promise<P
       lastNotifiedAt: true,
       suppressedUntil: true,
       storyTopics: {
-        include: { topic: true }
+        include: { topic: true },
       },
-      feedbackEvents: { 
-        select: { action: true, createdAt: true }, 
-        orderBy: { createdAt: 'desc' }, 
-        take: 5 
+      feedbackEvents: {
+        select: { action: true, createdAt: true },
+        orderBy: { createdAt: "desc" },
+        take: 5,
       },
     },
   });
 
   // Post-filter for sources if needed
   if (sources.length > 0) {
-    allStories = allStories.filter(story => {
+    allStories = allStories.filter((story) => {
       const storySource = extractSourceFromStoryId(story.id);
       return sources.includes(storySource);
     });
@@ -139,16 +141,16 @@ export async function getStoriesPaginated(params: StoriesQueryParams): Promise<P
   const allStoriesForMetadata = await prisma.story.findMany({
     select: { id: true },
   });
-  const availableSources = Array.from(new Set(
-    allStoriesForMetadata.map(s => extractSourceFromStoryId(s.id))
-  )).sort();
+  const availableSources = Array.from(
+    new Set(allStoriesForMetadata.map((s) => extractSourceFromStoryId(s.id))),
+  ).sort();
 
   const allTopics = await prisma.topic.findMany({
     select: { name: true },
-    orderBy: { score: 'desc' },
+    orderBy: { score: "desc" },
     take: 50, // Limit to top 50 topics
   });
-  const availableTopics = allTopics.map(t => t.name);
+  const availableTopics = allTopics.map((t) => t.name);
 
   return {
     stories,
@@ -163,70 +165,88 @@ export async function getStoriesPaginated(params: StoriesQueryParams): Promise<P
 
 function escapeHtml(str: string): string {
   return str
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }
 
 export function renderHomePage(
   data: PaginatedResult,
-  filters: { 
-    notificationSent: string; 
-    search: string; 
-    sortBy: string; 
+  filters: {
+    notificationSent: string;
+    search: string;
+    sortBy: string;
     sortOrder: string;
     rating: string;
     sources: string[];
     topics: string[];
-  }
+  },
 ): string {
-  const { stories, total, page, totalPages, availableSources, availableTopics } = data;
-  const { notificationSent, search, sortBy, sortOrder, rating, sources, topics } = filters;
+  const {
+    stories,
+    total,
+    page,
+    totalPages,
+    availableSources,
+    availableTopics,
+  } = data;
+  const {
+    notificationSent,
+    search,
+    sortBy,
+    sortOrder,
+    rating,
+    sources,
+    topics,
+  } = filters;
 
   const buildUrl = (newPage: number) => {
     const params = new URLSearchParams();
-    params.set('page', String(newPage));
-    if (notificationSent) params.set('notificationSent', notificationSent);
-    if (search) params.set('search', search);
-    if (sortBy) params.set('sortBy', sortBy);
-    if (sortOrder) params.set('sortOrder', sortOrder);
-    if (rating) params.set('rating', rating);
-    sources.forEach(s => params.append('sources', s));
-    topics.forEach(t => params.append('topics', t));
+    params.set("page", String(newPage));
+    if (notificationSent) params.set("notificationSent", notificationSent);
+    if (search) params.set("search", search);
+    if (sortBy) params.set("sortBy", sortBy);
+    if (sortOrder) params.set("sortOrder", sortOrder);
+    if (rating) params.set("rating", rating);
+    sources.forEach((s) => params.append("sources", s));
+    topics.forEach((t) => params.append("topics", t));
     return `/?${params.toString()}`;
   };
 
   const storyRows = stories
     .map((story) => {
       const storyTopics = story.storyTopics.map((st) => st.topic.name);
-      const topicsDisplay = storyTopics.slice(0, 3).join(', ');
-      const moreTopics = storyTopics.length > 3 ? ` +${storyTopics.length - 3}` : '';
-      
+      const topicsDisplay = storyTopics.slice(0, 3).join(", ");
+      const moreTopics =
+        storyTopics.length > 3 ? ` +${storyTopics.length - 3}` : "";
+
       const statusBadge = story.notificationSent
         ? '<span class="badge sent">Sent</span>'
         : '<span class="badge pending">Pending</span>';
-      
-      const ratingBadge = story.rating 
+
+      const ratingBadge = story.rating
         ? `<span class="badge rating-${story.rating}">${story.rating}</span>`
         : '<span class="badge unrated">UNRATED</span>';
-      
+
       const storyLink = story.url
         ? `<a href="${story.url}" target="_blank" rel="noopener" class="story-link">${escapeHtml(story.title)}</a>`
         : `<span>${escapeHtml(story.title)}</span>`;
-      
+
       const dateStr = new Date(story.firstSeenAt).toLocaleDateString();
       const sourceId = extractSourceFromStoryId(story.id);
-      
+
       // Match reason display
-      const matchReason = story.reason 
-        ? `<span class="match-reason" title="${escapeHtml(story.reason)}">${escapeHtml(story.reason.substring(0, 80))}${story.reason.length > 80 ? '...' : ''}</span>`
-        : '-';
+      const matchReason = story.reason
+        ? `<span class="match-reason" title="${escapeHtml(story.reason)}">${escapeHtml(story.reason.substring(0, 80))}${story.reason.length > 80 ? "..." : ""}</span>`
+        : "-";
 
       // Check if feedback exists
       const hasFeedback = story.feedbackEvents.length > 0;
-      const feedbackActions = story.feedbackEvents.map((fe) => fe.action).join(', ');
+      const feedbackActions = story.feedbackEvents
+        .map((fe) => fe.action)
+        .join(", ");
 
       const ratingButtons = !story.rating
         ? `<div class="rating-actions">
@@ -237,42 +257,47 @@ export function renderHomePage(
         : `<span class="rating-set">${story.rating}</span>`;
 
       // TLDR button (only show if story has URL)
-      const tldrButton = story.url 
+      const tldrButton = story.url
         ? `<button class="tldr-btn" onclick="generateTLDR('${story.id}', '${escapeHtml(story.title).replace(/'/g, "\\\\'")}')" title="Generate TLDR">📄 TLDR</button>`
-        : '';
+        : "";
 
-      return `<tr data-story-id="${story.id}" class="${story.rating ? 'rated' : 'unrated'}">
+      return `<tr data-story-id="${story.id}" class="${story.rating ? "rated" : "unrated"}">
       <td>
         ${storyLink}
         <div class="story-meta">
           <span class="source-tag">${escapeHtml(sourceId)}</span>
-          ${topicsDisplay ? `<span class="topics-inline">${escapeHtml(topicsDisplay)}${moreTopics}</span>` : ''}
+          ${topicsDisplay ? `<span class="topics-inline">${escapeHtml(topicsDisplay)}${moreTopics}</span>` : ""}
           ${tldrButton}
         </div>
-        ${story.reason ? `<div class="match-reason-row">${matchReason}</div>` : ''}
+        ${story.reason ? `<div class="match-reason-row">${matchReason}</div>` : ""}
       </td>
-      <td class="center">${story.score ?? '-'}</td>
+      <td class="center">${story.score ?? "-"}</td>
       <td class="center">${ratingBadge}</td>
       <td class="center">${statusBadge}</td>
       <td class="center">${dateStr}</td>
       <td class="rating-cell">${ratingButtons}</td>
     </tr>`;
     })
-    .join('');
+    .join("");
 
   // Build source filter chips
-  const sourceChips = availableSources.map(src => {
-    const isSelected = sources.includes(src);
-    const className = isSelected ? 'chip chip-selected' : 'chip';
-    return `<button class="${className}" onclick="toggleFilter('sources', '${src}')">${escapeHtml(src)}</button>`;
-  }).join('');
+  const sourceChips = availableSources
+    .map((src) => {
+      const isSelected = sources.includes(src);
+      const className = isSelected ? "chip chip-selected" : "chip";
+      return `<button class="${className}" onclick="toggleFilter('sources', '${src}')">${escapeHtml(src)}</button>`;
+    })
+    .join("");
 
   // Build topic filter chips (show top 20)
-  const topicChips = availableTopics.slice(0, 20).map(topic => {
-    const isSelected = topics.includes(topic);
-    const className = isSelected ? 'chip chip-selected' : 'chip';
-    return `<button class="${className}" onclick="toggleFilter('topics', '${escapeHtml(topic)}')">${escapeHtml(topic)}</button>`;
-  }).join('');
+  const topicChips = availableTopics
+    .slice(0, 20)
+    .map((topic) => {
+      const isSelected = topics.includes(topic);
+      const className = isSelected ? "chip chip-selected" : "chip";
+      return `<button class="${className}" onclick="toggleFilter('topics', '${escapeHtml(topic)}')">${escapeHtml(topic)}</button>`;
+    })
+    .join("");
 
   return `<!doctype html>
 <html lang="en">
@@ -769,35 +794,35 @@ export function renderHomePage(
           <div class="filter-group">
             <label for="rating">Review Status</label>
             <select id="rating" name="rating">
-              <option value="unrated" ${rating === 'unrated' || !rating ? 'selected' : ''}>Unrated (Default)</option>
-              <option value="all" ${rating === 'all' ? 'selected' : ''}>All</option>
-              <option value="useful" ${rating === 'useful' ? 'selected' : ''}>Useful</option>
-              <option value="skip" ${rating === 'skip' ? 'selected' : ''}>Skip</option>
-              <option value="bookmark" ${rating === 'bookmark' ? 'selected' : ''}>Bookmark</option>
+              <option value="unrated" ${rating === "unrated" || !rating ? "selected" : ""}>Unrated (Default)</option>
+              <option value="all" ${rating === "all" ? "selected" : ""}>All</option>
+              <option value="useful" ${rating === "useful" ? "selected" : ""}>Useful</option>
+              <option value="skip" ${rating === "skip" ? "selected" : ""}>Skip</option>
+              <option value="bookmark" ${rating === "bookmark" ? "selected" : ""}>Bookmark</option>
             </select>
           </div>
           <div class="filter-group">
             <label for="notificationSent">Notification</label>
             <select id="notificationSent" name="notificationSent">
               <option value="">All</option>
-              <option value="true" ${notificationSent === 'true' ? 'selected' : ''}>Sent</option>
-              <option value="false" ${notificationSent === 'false' ? 'selected' : ''}>Pending</option>
+              <option value="true" ${notificationSent === "true" ? "selected" : ""}>Sent</option>
+              <option value="false" ${notificationSent === "false" ? "selected" : ""}>Pending</option>
             </select>
           </div>
           <div class="filter-group">
             <label for="sortBy">Sort By</label>
             <select id="sortBy" name="sortBy">
-              <option value="firstSeenAt" ${sortBy === 'firstSeenAt' ? 'selected' : ''}>First Seen</option>
-              <option value="score" ${sortBy === 'score' ? 'selected' : ''}>HN Score</option>
-              <option value="relevanceScore" ${sortBy === 'relevanceScore' ? 'selected' : ''}>Relevance</option>
-              <option value="date" ${sortBy === 'date' ? 'selected' : ''}>Date</option>
+              <option value="firstSeenAt" ${sortBy === "firstSeenAt" ? "selected" : ""}>First Seen</option>
+              <option value="score" ${sortBy === "score" ? "selected" : ""}>HN Score</option>
+              <option value="relevanceScore" ${sortBy === "relevanceScore" ? "selected" : ""}>Relevance</option>
+              <option value="date" ${sortBy === "date" ? "selected" : ""}>Date</option>
             </select>
           </div>
           <div class="filter-group">
             <label for="sortOrder">Order</label>
             <select id="sortOrder" name="sortOrder">
-              <option value="desc" ${sortOrder === 'desc' ? 'selected' : ''}>Descending</option>
-              <option value="asc" ${sortOrder === 'asc' ? 'selected' : ''}>Ascending</option>
+              <option value="desc" ${sortOrder === "desc" ? "selected" : ""}>Descending</option>
+              <option value="asc" ${sortOrder === "asc" ? "selected" : ""}>Ascending</option>
             </select>
           </div>
           <div class="filter-group" style="justify-content: flex-end;">
@@ -806,19 +831,27 @@ export function renderHomePage(
           </div>
         </div>
 
-        ${availableSources.length > 0 ? `
+        ${
+          availableSources.length > 0
+            ? `
         <div class="section-title">Filter by Source</div>
         <div class="chip-container">
           ${sourceChips}
         </div>
-        ` : ''}
+        `
+            : ""
+        }
 
-        ${availableTopics.length > 0 ? `
+        ${
+          availableTopics.length > 0
+            ? `
         <div class="section-title">Filter by Topic (Top 20)</div>
         <div class="chip-container">
           ${topicChips}
         </div>
-        ` : ''}
+        `
+            : ""
+        }
 
         <input type="hidden" id="sourcesInput" name="sources" value="">
         <input type="hidden" id="topicsInput" name="topics" value="">

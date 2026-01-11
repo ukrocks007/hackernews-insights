@@ -22,7 +22,6 @@ When you run `pm2 start ecosystem.config.js`, the following happens automaticall
    - Installs dependencies (`npm install`)
    - Builds the project (`npm run build`)
    - Runs database migrations (`npx prisma migrate deploy`)
-   
 2. **Start Phase**:
    - Application starts with the built code
    - Logs appear in PM2 immediately
@@ -70,11 +69,13 @@ pm2 flush hn-insights-server        # Clear logs
 ## Log Files
 
 Logs are stored in the `logs/` directory:
+
 - `logs/output.log` - Standard output (INFO logs)
 - `logs/error.log` - Error output (WARN, ERROR logs)
 - `logs/combined.log` - All logs combined
 
 View logs directly:
+
 ```bash
 tail -f logs/output.log
 tail -f logs/error.log
@@ -85,16 +86,19 @@ tail -f logs/error.log
 ### Logs not showing?
 
 1. **Verify the app is running:**
+
    ```bash
    pm2 status
    ```
 
 2. **Check if app keeps restarting:**
+
    ```bash
    pm2 logs hn-insights-server --err --lines 50
    ```
 
 3. **Flush and restart:**
+
    ```bash
    pm2 flush hn-insights-server
    pm2 restart hn-insights-server
@@ -102,6 +106,7 @@ tail -f logs/error.log
    ```
 
 4. **Check log files directly:**
+
    ```bash
    ls -lh logs/
    tail -f logs/output.log
@@ -115,17 +120,20 @@ tail -f logs/error.log
 ### App exits immediately?
 
 This was the main bug - now fixed. The app should stay running. Check:
+
 ```bash
 pm2 logs hn-insights-server
 ```
 
 You should see:
+
 ```
 [INFO] [timestamp] Starting HN Insights Agent...
 [INFO] [timestamp] Feedback server started successfully. Application is running...
 ```
 
 If you see "Done." immediately, the old code is still running. Rebuild:
+
 ```bash
 npm run build
 pm2 restart hn-insights-server
@@ -168,6 +176,7 @@ pm2 reload hn-insights-server
 The app uses `.env` file which is copied to `dist/.env` during build (which happens automatically via deploy.sh).
 
 To update environment variables:
+
 1. Edit `.env`
 2. Run `pm2 restart hn-insights-server` (deploy.sh will rebuild automatically)
 
@@ -216,6 +225,7 @@ pm2 start dist/index.js --name hn-insights-server
 ## What Was Fixed
 
 ### Before (Broken):
+
 ```typescript
 async function main() {
   try {
@@ -225,13 +235,14 @@ async function main() {
     logger.error("Fatal error", error);
     process.exit(1);
   } finally {
-    await closeDB();    // ❌ This runs immediately!
+    await closeDB(); // ❌ This runs immediately!
     logger.info("Done."); // ❌ App exits!
   }
 }
 ```
 
 ### After (Fixed):
+
 ```typescript
 async function main() {
   try {
@@ -249,7 +260,7 @@ async function main() {
 }
 
 // ✅ Graceful shutdown on signals
-process.on('SIGINT', async () => {
+process.on("SIGINT", async () => {
   logger.info("Shutting down gracefully...");
   await closeDB();
   process.exit(0);
@@ -290,6 +301,7 @@ pm2 monit
 ## Need Help?
 
 If logs still don't appear:
+
 1. Check `pm2 status` - app should be "online"
 2. Check `pm2 logs hn-insights-server --err` for errors
 3. Check `logs/error.log` directly
@@ -300,6 +312,7 @@ If logs still don't appear:
 ## Summary
 
 **Key Points:**
+
 - ✅ `deploy.sh` runs automatically on every `pm2 start` or `pm2 restart`
 - ✅ No need to manually run `npm install`, `npm run build`, or migrations
 - ✅ Logs appear immediately in PM2
@@ -307,6 +320,7 @@ If logs still don't appear:
 - ✅ Graceful shutdown on stop/restart
 
 **Usage:**
+
 ```bash
 pm2 start ecosystem.config.js    # Deploy + Start
 pm2 restart hn-insights-server    # Deploy + Restart

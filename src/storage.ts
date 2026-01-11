@@ -1,7 +1,11 @@
-import { FeedbackEvent, Story } from '@prisma/client';
-import { computeRelevanceScore, DEFAULT_TOPIC_WEIGHT_RATIO, SCORE_SCALE } from './feedback';
-import { disconnectPrisma, getPrismaClient, initPrisma } from './prismaClient';
-import logger from './logger';
+import { FeedbackEvent, Story } from "@prisma/client";
+import {
+  computeRelevanceScore,
+  DEFAULT_TOPIC_WEIGHT_RATIO,
+  SCORE_SCALE,
+} from "./feedback";
+import { disconnectPrisma, getPrismaClient, initPrisma } from "./prismaClient";
+import logger from "./logger";
 
 export type StoredStory = Story;
 
@@ -19,19 +23,19 @@ export interface StoryInput {
 
 export interface TopicInput {
   name: string;
-  source: 'title' | 'content' | 'metadata';
+  source: "title" | "content" | "metadata";
   weight?: number;
 }
 
 // New stories start at SCORE_SCALE (represents a baseline relevance of 1.0)
 const DEFAULT_RELEVANCE_SCORE = SCORE_SCALE;
-const UNIQUE_CONSTRAINT_ERROR = 'P2002';
-const ALLOWED_TOPIC_SOURCES = new Set(['title', 'content', 'metadata']);
+const UNIQUE_CONSTRAINT_ERROR = "P2002";
+const ALLOWED_TOPIC_SOURCES = new Set(["title", "content", "metadata"]);
 
 function getErrorCode(error: unknown): string | null {
-  if (typeof error === 'object' && error && 'code' in error) {
+  if (typeof error === "object" && error && "code" in error) {
     const withCode = error as { code?: unknown };
-    return typeof withCode.code === 'string' ? withCode.code : null;
+    return typeof withCode.code === "string" ? withCode.code : null;
   }
   return null;
 }
@@ -44,7 +48,10 @@ function normalizeTopicName(topic: string): string {
   return topic.trim().toLowerCase();
 }
 
-async function persistTopicsForStory(storyId: string, topics: TopicInput[]): Promise<void> {
+async function persistTopicsForStory(
+  storyId: string,
+  topics: TopicInput[],
+): Promise<void> {
   if (!topics.length) return;
   const prisma = getPrismaClient();
 
@@ -52,8 +59,11 @@ async function persistTopicsForStory(storyId: string, topics: TopicInput[]): Pro
     const name = normalizeTopicName(topic.name);
     if (!name) continue;
 
-    const weight = topic.weight ?? Math.round(SCORE_SCALE * DEFAULT_TOPIC_WEIGHT_RATIO);
-    const source = ALLOWED_TOPIC_SOURCES.has(topic.source) ? topic.source : 'metadata';
+    const weight =
+      topic.weight ?? Math.round(SCORE_SCALE * DEFAULT_TOPIC_WEIGHT_RATIO);
+    const source = ALLOWED_TOPIC_SOURCES.has(topic.source)
+      ? topic.source
+      : "metadata";
     const topicRecord = await prisma.topic.upsert({
       where: { name },
       update: { score: { increment: weight } },
@@ -72,7 +82,9 @@ async function persistTopicsForStory(storyId: string, topics: TopicInput[]): Pro
     } catch (error: unknown) {
       const code = getErrorCode(error);
       if (code !== UNIQUE_CONSTRAINT_ERROR) {
-        logger.error(`Unexpected error while saving story topic for ${storyId}/${name}: ${error}`);
+        logger.error(
+          `Unexpected error while saving story topic for ${storyId}/${name}: ${error}`,
+        );
         throw error;
       }
       logger.info(`Duplicate story-topic link ignored for ${storyId}/${name}`);
@@ -80,7 +92,10 @@ async function persistTopicsForStory(storyId: string, topics: TopicInput[]): Pro
   }
 }
 
-export async function saveStory(story: StoryInput, topics: TopicInput[] = []): Promise<void> {
+export async function saveStory(
+  story: StoryInput,
+  topics: TopicInput[] = [],
+): Promise<void> {
   const prisma = getPrismaClient();
   try {
     await prisma.story.create({
@@ -108,15 +123,19 @@ export async function saveStory(story: StoryInput, topics: TopicInput[] = []): P
   }
 }
 
-function withoutRelations(story: Story & { feedbackEvents?: FeedbackEvent[] }): Story {
-  if (!('feedbackEvents' in story)) {
+function withoutRelations(
+  story: Story & { feedbackEvents?: FeedbackEvent[] },
+): Story {
+  if (!("feedbackEvents" in story)) {
     return story;
   }
   const { feedbackEvents: _feedbackEvents, ...rest } = story;
   return rest as Story;
 }
 
-async function refreshRelevance(story: Story & { feedbackEvents: FeedbackEvent[] }): Promise<Story & { feedbackEvents: FeedbackEvent[] }> {
+async function refreshRelevance(
+  story: Story & { feedbackEvents: FeedbackEvent[] },
+): Promise<Story & { feedbackEvents: FeedbackEvent[] }> {
   const prisma = getPrismaClient();
   const computation = computeRelevanceScore(story, story.feedbackEvents);
   const currentSuppression = story.suppressedUntil?.getTime() ?? null;
@@ -127,10 +146,14 @@ async function refreshRelevance(story: Story & { feedbackEvents: FeedbackEvent[]
     currentSuppression !== nextSuppression
   ) {
     if (computation.suppressedUntil && !story.suppressedUntil) {
-      logger.info(`Story ${story.id} temporarily suppressed until ${computation.suppressedUntil.toISOString()}`);
+      logger.info(
+        `Story ${story.id} temporarily suppressed until ${computation.suppressedUntil.toISOString()}`,
+      );
     }
     if (!computation.suppressedUntil && story.suppressedUntil) {
-      logger.info(`Story ${story.id} suppression cleared after feedback recovery`);
+      logger.info(
+        `Story ${story.id} suppression cleared after feedback recovery`,
+      );
     }
     const updated = await prisma.story.update({
       where: { id: story.id },
@@ -161,7 +184,8 @@ export async function getUnsentRelevantStories(): Promise<Story[]> {
   });
 
   // Sequential to avoid hammering SQLite with concurrent writes during refresh.
-  const refreshedStories: Array<Story & { feedbackEvents: FeedbackEvent[] }> = [];
+  const refreshedStories: Array<Story & { feedbackEvents: FeedbackEvent[] }> =
+    [];
   for (const story of stories) {
     refreshedStories.push(await refreshRelevance(story));
   }
@@ -198,15 +222,18 @@ export async function closeDB(): Promise<void> {
   await disconnectPrisma();
 }
 
-export type StoryRating = 'useful' | 'skip' | 'bookmark' | null;
+export type StoryRating = "useful" | "skip" | "bookmark" | null;
 
-export async function setStoryRating(id: string, rating: StoryRating): Promise<void> {
+export async function setStoryRating(
+  id: string,
+  rating: StoryRating,
+): Promise<void> {
   const prisma = getPrismaClient();
   await prisma.story.update({
     where: { id },
     data: { rating },
   });
-  logger.info(`Story ${id} rated as: ${rating ?? 'unrated'}`);
+  logger.info(`Story ${id} rated as: ${rating ?? "unrated"}`);
 }
 
 export interface TLDRData {
@@ -216,7 +243,10 @@ export interface TLDRData {
   generatedAt: Date;
 }
 
-export async function saveTLDR(storyId: string, tldrData: TLDRData): Promise<void> {
+export async function saveTLDR(
+  storyId: string,
+  tldrData: TLDRData,
+): Promise<void> {
   const prisma = getPrismaClient();
   await prisma.story.update({
     where: { id: storyId },
@@ -227,7 +257,9 @@ export async function saveTLDR(storyId: string, tldrData: TLDRData): Promise<voi
       tldrGeneratedAt: tldrData.generatedAt,
     },
   });
-  logger.info(`TLDR saved for story ${storyId} (${tldrData.tldr.length} chars)`);
+  logger.info(
+    `TLDR saved for story ${storyId} (${tldrData.tldr.length} chars)`,
+  );
 }
 
 export async function getTLDR(storyId: string): Promise<TLDRData | null> {
@@ -241,14 +273,14 @@ export async function getTLDR(storyId: string): Promise<TLDRData | null> {
       tldrGeneratedAt: true,
     },
   });
-  
+
   if (!story || !story.tldr) {
     return null;
   }
-  
+
   return {
     tldr: story.tldr,
-    model: story.tldrModel || 'unknown',
+    model: story.tldrModel || "unknown",
     contentLength: story.tldrContentLength || 0,
     generatedAt: story.tldrGeneratedAt || new Date(),
   };

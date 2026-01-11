@@ -1,11 +1,8 @@
-import {
-  initDB,
-  closeDB,
-} from "./storage";
+import { initDB, closeDB } from "./storage";
 import { sendErrorNotification } from "./notifier";
 import { startFeedbackServer } from "./feedbackServer";
 import logger from "./logger";
-export { fetchAndFilterStories } from './insightTracker';
+export { fetchAndFilterStories } from "./insightTracker";
 
 async function main() {
   try {
@@ -14,7 +11,9 @@ async function main() {
     try {
       const server = await startFeedbackServer();
       if (server) {
-        logger.info("Feedback server started successfully. Application is running...");
+        logger.info(
+          "Feedback server started successfully. Application is running...",
+        );
         // Keep the process alive - the server will handle incoming requests
         // Process will only exit on fatal errors or manual termination
       } else {
@@ -30,7 +29,7 @@ async function main() {
         "\nReason:",
         reason,
         "\nRaw error:",
-        error
+        error,
       );
     }
     // Do not auto-run fetchAndFilterStories here; it is triggered via endpoint
@@ -43,13 +42,13 @@ async function main() {
 }
 
 // Handle graceful shutdown
-process.on('SIGINT', async () => {
+process.on("SIGINT", async () => {
   logger.info("Received SIGINT signal. Shutting down gracefully...");
   await closeDB();
   process.exit(0);
 });
 
-process.on('SIGTERM', async () => {
+process.on("SIGTERM", async () => {
   logger.info("Received SIGTERM signal. Shutting down gracefully...");
   await closeDB();
   process.exit(0);

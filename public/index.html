@@ -1,129 +1,148 @@
 <!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>HN Insights - Dashboard</title>
-  <link rel="stylesheet" href="styles.css">
-</head>
-<body>
-  <div class="container">
-    <div class="header">
-      <h1>📰 HN Insights Dashboard</h1>
-      <div class="header-actions">
-        <button id="fetchBtn" class="btn btn-primary" onclick="triggerFetch()">🔄 Trigger Fetch</button>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>HN Insights - Dashboard</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <h1>📰 HN Insights Dashboard</h1>
+        <div class="header-actions">
+          <button
+            id="fetchBtn"
+            class="btn btn-primary"
+            onclick="triggerFetch()"
+          >
+            🔄 Trigger Fetch
+          </button>
+        </div>
+      </div>
+
+      <div id="statusMessage" class="status-message"></div>
+
+      <div class="card">
+        <form class="filters" id="filterForm">
+          <div class="filter-row">
+            <div class="filter-group">
+              <label for="search">Search</label>
+              <input
+                type="text"
+                id="search"
+                name="search"
+                placeholder="Search titles..."
+              />
+            </div>
+            <div class="filter-group">
+              <label for="rating">Review Status</label>
+              <select id="rating" name="rating">
+                <option value="unrated">Unrated (Default)</option>
+                <option value="all">All</option>
+                <option value="useful">Useful</option>
+                <option value="skip">Skip</option>
+                <option value="bookmark">Bookmark</option>
+              </select>
+            </div>
+            <div class="filter-group">
+              <label for="notificationSent">Notification</label>
+              <select id="notificationSent" name="notificationSent">
+                <option value="">All</option>
+                <option value="true">Sent</option>
+                <option value="false">Pending</option>
+              </select>
+            </div>
+            <div class="filter-group">
+              <label for="sortBy">Sort By</label>
+              <select id="sortBy" name="sortBy">
+                <option value="firstSeenAt">First Seen</option>
+                <option value="score">HN Score</option>
+                <option value="relevanceScore">Relevance</option>
+                <option value="date">Date</option>
+              </select>
+            </div>
+            <div class="filter-group">
+              <label for="sortOrder">Order</label>
+              <select id="sortOrder" name="sortOrder">
+                <option value="desc">Descending</option>
+                <option value="asc">Ascending</option>
+              </select>
+            </div>
+            <div class="filter-group" style="justify-content: flex-end">
+              <label>&nbsp;</label>
+              <button type="submit" class="btn btn-primary">
+                Apply Filters
+              </button>
+            </div>
+          </div>
+
+          <div id="sourceFilters" class="section-title" style="display: none">
+            Filter by Source
+          </div>
+          <div class="chip-container" id="sourceChips"></div>
+
+          <div id="topicFilters" class="section-title" style="display: none">
+            Filter by Topic (Top 20)
+          </div>
+          <div class="chip-container" id="topicChips"></div>
+
+          <input type="hidden" id="sourcesInput" name="sources" value="" />
+          <input type="hidden" id="topicsInput" name="topics" value="" />
+        </form>
+
+        <div class="table-wrapper">
+          <table id="storiesTable">
+            <thead>
+              <tr>
+                <th>Title & Metadata</th>
+                <th class="center">Score</th>
+                <th class="center">Rating</th>
+                <th class="center">Status</th>
+                <th class="center">First Seen</th>
+                <th class="center">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="storiesBody">
+              <!-- Stories will be populated here -->
+            </tbody>
+          </table>
+          <div id="emptyState" class="empty-state" style="display: none">
+            <h3>No stories found</h3>
+            <p>Try adjusting your filters or trigger a new fetch.</p>
+          </div>
+        </div>
+
+        <div class="pagination" id="pagination">
+          <div class="pagination-info" id="paginationInfo">Loading...</div>
+          <div class="pagination-buttons" id="paginationButtons">
+            <!-- Pagination buttons will be populated here -->
+          </div>
+        </div>
       </div>
     </div>
 
-    <div id="statusMessage" class="status-message"></div>
-
-    <div class="card">
-      <form class="filters" id="filterForm">
-        <div class="filter-row">
-          <div class="filter-group">
-            <label for="search">Search</label>
-            <input type="text" id="search" name="search" placeholder="Search titles...">
-          </div>
-          <div class="filter-group">
-            <label for="rating">Review Status</label>
-            <select id="rating" name="rating">
-              <option value="unrated">Unrated (Default)</option>
-              <option value="all">All</option>
-              <option value="useful">Useful</option>
-              <option value="skip">Skip</option>
-              <option value="bookmark">Bookmark</option>
-            </select>
-          </div>
-          <div class="filter-group">
-            <label for="notificationSent">Notification</label>
-            <select id="notificationSent" name="notificationSent">
-              <option value="">All</option>
-              <option value="true">Sent</option>
-              <option value="false">Pending</option>
-            </select>
-          </div>
-          <div class="filter-group">
-            <label for="sortBy">Sort By</label>
-            <select id="sortBy" name="sortBy">
-              <option value="firstSeenAt">First Seen</option>
-              <option value="score">HN Score</option>
-              <option value="relevanceScore">Relevance</option>
-              <option value="date">Date</option>
-            </select>
-          </div>
-          <div class="filter-group">
-            <label for="sortOrder">Order</label>
-            <select id="sortOrder" name="sortOrder">
-              <option value="desc">Descending</option>
-              <option value="asc">Ascending</option>
-            </select>
-          </div>
-          <div class="filter-group" style="justify-content: flex-end;">
-            <label>&nbsp;</label>
-            <button type="submit" class="btn btn-primary">Apply Filters</button>
-          </div>
+    <!-- TLDR Modal -->
+    <div id="tldrModal" class="modal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2 id="tldrModalTitle">📄 TLDR Summary</h2>
+          <button class="modal-close" onclick="closeTLDRModal()">
+            &times;
+          </button>
         </div>
-
-        <div id="sourceFilters" class="section-title" style="display: none;">Filter by Source</div>
-        <div class="chip-container" id="sourceChips"></div>
-
-        <div id="topicFilters" class="section-title" style="display: none;">Filter by Topic (Top 20)</div>
-        <div class="chip-container" id="topicChips"></div>
-
-        <input type="hidden" id="sourcesInput" name="sources" value="">
-        <input type="hidden" id="topicsInput" name="topics" value="">
-      </form>
-
-      <div class="table-wrapper">
-        <table id="storiesTable">
-          <thead>
-            <tr>
-              <th>Title & Metadata</th>
-              <th class="center">Score</th>
-              <th class="center">Rating</th>
-              <th class="center">Status</th>
-              <th class="center">First Seen</th>
-              <th class="center">Actions</th>
-            </tr>
-          </thead>
-          <tbody id="storiesBody">
-            <!-- Stories will be populated here -->
-          </tbody>
-        </table>
-        <div id="emptyState" class="empty-state" style="display: none;">
-          <h3>No stories found</h3>
-          <p>Try adjusting your filters or trigger a new fetch.</p>
-        </div>
-      </div>
-
-      <div class="pagination" id="pagination">
-        <div class="pagination-info" id="paginationInfo">
-          Loading...
-        </div>
-        <div class="pagination-buttons" id="paginationButtons">
-          <!-- Pagination buttons will be populated here -->
+        <div class="modal-body" id="tldrModalBody">
+          <div class="tldr-loading">
+            <div class="spinner"></div>
+            <p>Generating TLDR summary...</p>
+            <p style="font-size: 12px; margin-top: 8px">
+              This may take 10-30 seconds
+            </p>
+          </div>
         </div>
       </div>
     </div>
-  </div>
 
-  <!-- TLDR Modal -->
-  <div id="tldrModal" class="modal">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h2 id="tldrModalTitle">📄 TLDR Summary</h2>
-        <button class="modal-close" onclick="closeTLDRModal()">&times;</button>
-      </div>
-      <div class="modal-body" id="tldrModalBody">
-        <div class="tldr-loading">
-          <div class="spinner"></div>
-          <p>Generating TLDR summary...</p>
-          <p style="font-size: 12px; margin-top: 8px;">This may take 10-30 seconds</p>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <script src="script.js"></script>
-</body>
+    <script src="script.js"></script>
+  </body>
 </html>

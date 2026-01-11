@@ -22,6 +22,7 @@ The TLDR feature provides user-initiated article summarization for stories in th
 ### Prompt Optimization (Jan 2026)
 
 To reduce LLM inference time and prevent timeouts, the TLDR generator now:
+
 - Limits content sent to the LLM to 1200 words (was 4000)
 - Prioritizes the first 5 paragraphs and key sections (title, meta, headings)
 - Further restricts model output length
@@ -30,6 +31,7 @@ To reduce LLM inference time and prevent timeouts, the TLDR generator now:
 ### Database Schema
 
 New fields added to the `Story` model:
+
 - `tldr` (nullable string): The generated summary text
 - `tldrGeneratedAt` (nullable DateTime): When the TLDR was generated
 - `tldrModel` (nullable string): Which model was used (e.g., "qwen2.5:0.5b")
@@ -40,6 +42,7 @@ New fields added to the `Story` model:
 **POST `/api/generate-tldr`**
 
 Request body:
+
 ```json
 {
   "storyId": "hackernews:12345"
@@ -47,6 +50,7 @@ Request body:
 ```
 
 Success response (cached):
+
 ```json
 {
   "status": "ok",
@@ -56,6 +60,7 @@ Success response (cached):
 ```
 
 Success response (new generation):
+
 ```json
 {
   "status": "ok",
@@ -67,6 +72,7 @@ Success response (new generation):
 ```
 
 Error response:
+
 ```json
 {
   "status": "error",
@@ -79,6 +85,7 @@ Error response:
 The system uses Playwright to extract article content with strict filtering:
 
 **Extracted Elements:**
+
 - Page title
 - Meta description
 - Headings (h1, h2, h3)
@@ -87,6 +94,7 @@ The system uses Playwright to extract article content with strict filtering:
 - Full article text
 
 **Filtered Out:**
+
 - Navigation menus
 - Headers and footers
 - Advertisements
@@ -97,6 +105,7 @@ The system uses Playwright to extract article content with strict filtering:
 - Sidebars and widgets
 
 **Limits:**
+
 - Page load timeout: 15 seconds (hard limit)
 - Content length: ~3,000-4,000 words
 - Truncation: At sentence boundaries when possible
@@ -106,6 +115,7 @@ The system uses Playwright to extract article content with strict filtering:
 **Model:** qwen2.5:0.5b (lightweight, suitable for Raspberry Pi)
 
 **System Prompt:**
+
 ```
 You generate concise TLDR summaries for technical articles.
 Your goal is to help a developer decide whether to read the full article.
@@ -122,6 +132,7 @@ Rules:
 ```
 
 **User Prompt Template:**
+
 ```
 Article title:
 <extracted title>
@@ -135,18 +146,21 @@ whether to read the full article.
 ```
 
 **LLM Parameters:**
+
 - Temperature: 0.3 (low for factual output)
 - Max tokens: 300 (limit output length)
 
 ### UI Components
 
 **TLDR Button:**
+
 - Appears inline with story metadata
 - Only shown for stories with URLs
 - Icon: 📄 TLDR
 - Styled as a subtle action button
 
 **TLDR Modal:**
+
 - Full-screen overlay with backdrop blur
 - Modal header displays the story title
 - Loading state with spinner
@@ -159,16 +173,19 @@ whether to read the full article.
 ### Prerequisites
 
 1. **Install Ollama:**
+
    ```bash
    curl -fsSL https://ollama.ai/install.sh | sh
    ```
 
 2. **Pull the qwen2.5:0.5b model:**
+
    ```bash
    ollama pull qwen2.5:0.5b
    ```
 
 3. **Ensure Ollama is running:**
+
    ```bash
    # Should be running as a service, or start manually:
    ollama serve
@@ -182,6 +199,7 @@ whether to read the full article.
 ### Manual Testing Steps
 
 1. **Start the application:**
+
    ```bash
    npm run dev
    # or for production build:
@@ -189,6 +207,7 @@ whether to read the full article.
    ```
 
 2. **Open the dashboard:**
+
    ```
    http://localhost:3000
    ```
@@ -268,12 +287,14 @@ sqlite3 db/hn.sqlite "SELECT id, title, tldr IS NOT NULL as has_tldr, tldrModel,
 **Problem:** Modal shows "TLDR unavailable for this article."
 
 **Possible causes:**
+
 1. Ollama not running or model not available
 2. Article URL is inaccessible
 3. Page load timeout (>15s)
 4. Content extraction failed (PDF, image, etc.)
 
 **Solutions:**
+
 1. Check Ollama: `ollama list` should show qwen2.5:0.5b
 2. Verify URL is accessible in browser
 3. Check application logs for errors
@@ -284,12 +305,14 @@ sqlite3 db/hn.sqlite "SELECT id, title, tldr IS NOT NULL as has_tldr, tldrModel,
 **Problem:** Generation takes longer than 30 seconds
 
 **Possible causes:**
+
 1. Large article with lots of content
 2. Slow network connection
 3. Resource constraints on Raspberry Pi
 4. Ollama model loading
 
 **Solutions:**
+
 1. This is acceptable per requirements (10-30s expected)
 2. Ensure good network connection
 3. Monitor system resources (CPU, RAM)
@@ -300,11 +323,13 @@ sqlite3 db/hn.sqlite "SELECT id, title, tldr IS NOT NULL as has_tldr, tldrModel,
 **Problem:** Generated summary is not useful or accurate
 
 **Possible causes:**
+
 1. Poor content extraction (too much noise)
 2. Article structure not recognized
 3. Model limitations
 
 **Solutions:**
+
 1. Check extracted content in logs
 2. Adjust content extraction selectors if needed
 3. Consider temperature adjustment (currently 0.3)
@@ -332,9 +357,11 @@ sqlite3 db/hn.sqlite "SELECT id, title, tldr IS NOT NULL as has_tldr, tldrModel,
 ## Files Modified/Added
 
 ### New Files
+
 - `src/tldrGenerator.ts` - Core TLDR generation logic
 
 ### Modified Files
+
 - `prisma/schema.prisma` - Added TLDR fields to Story model
 - `src/storage.ts` - Added saveTLDR() and getTLDR() functions
 - `src/feedbackServer.ts` - Added POST /api/generate-tldr endpoint
@@ -342,6 +369,7 @@ sqlite3 db/hn.sqlite "SELECT id, title, tldr IS NOT NULL as has_tldr, tldrModel,
 - `AI_CONTEXT.md` - Comprehensive TLDR feature documentation
 
 ### Configuration
+
 - Model: qwen2.5:0.5b (configured in tldrGenerator.ts)
 - Ollama URL: Uses OLLAMA_BASE_URL env var (defaults to http://localhost:11434)
 - Headless mode: Uses HEADLESS env var (defaults to true)
