@@ -117,7 +117,15 @@ async function processCandidate(
       notificationSent: false,
     };
 
-    await saveStory(fullStory);
+    // --- Topic extraction and association ---
+    const extracted = extractTopics(fullStory.title, fullStory.url || "", content);
+    // Convert to TopicInput[] with source info
+    const topics = extracted.finalTopics.map((name) => ({
+      name,
+      source: "content" as const,
+    }));
+
+    await saveStory(fullStory, topics);
     return true;
   }
 

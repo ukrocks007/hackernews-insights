@@ -149,7 +149,9 @@ Metadata is displayed inline within the list to aid decision-making without requ
     - Skips already-processed stories via `hasStoryBeenProcessed`.
     - Applies a Hacker News score pre-filter (`MIN_HN_SCORE`) for HN candidates only.
     - Fetches `ContentSignals` via `scrapeStoryContent` or uses pre-attached content.
-    - Calls `checkRelevance` (Ollama) and, on match, persists a `Story` via `saveStory` with an initial relevance score.
+    - Calls `checkRelevance` (Ollama) and, on match:
+      - Extracts relevant topics using `extractTopics(title, url, content)`.
+      - Persists the `Story` via `saveStory` **with extracted topics** for filtering and metadata.
   - After ingestion, calls `getUnsentRelevantStories()`, ranks by relevance/score, and sends up to 5 notifications via `sendStoryNotification`, marking them as sent.
 
 ### Scrapers & multi-source registry
@@ -329,7 +331,7 @@ Metadata is displayed inline within the list to aid decision-making without requ
 - `src/topicExtractor.ts`
   - Performs deterministic, content-grounded topic extraction using title, URL, headings, body text, and heuristics (stop-word filtering, phrase ranking).
   - Returns an `ExtractedTopics` structure (`candidates`, `finalTopics`, `confirmed`, `removed`, `added`) and logs what was kept/removed.
-  - **Current wiring:** Helpers are available but ingestion currently saves stories without passing `TopicInput[]`. To add topics, call `extractTopics(title, url, content)` during ingestion and pass converted topics into `saveStory()`.
+  - **Ingestion always extracts and saves topics:** For every new story, topics are extracted during ingestion and saved with the story for filtering and metadata. This ensures all new stories have topics available for dashboard filtering and metadata display.
 
 - `src/logger.ts`
   - Central logging utility; use `logger.info`, `logger.warn`, `logger.error` consistently instead of `console.*`.
