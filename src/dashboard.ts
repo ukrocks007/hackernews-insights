@@ -238,7 +238,7 @@ export function renderHomePage(
 
       // TLDR button (only show if story has URL)
       const tldrButton = story.url 
-        ? `<button class="tldr-btn" onclick="generateTLDR('${story.id}')" title="Generate TLDR">📄 TLDR</button>`
+        ? `<button class="tldr-btn" onclick="generateTLDR('${story.id}', '${escapeHtml(story.title).replace(/'/g, "\\\\'")}')" title="Generate TLDR">📄 TLDR</button>`
         : '';
 
       return `<tr data-story-id="${story.id}" class="${story.rating ? 'rated' : 'unrated'}">
@@ -869,7 +869,7 @@ export function renderHomePage(
   <div id="tldrModal" class="modal">
     <div class="modal-content">
       <div class="modal-header">
-        <h2>📄 TLDR Summary</h2>
+        <h2 id="tldrModalTitle">📄 TLDR Summary</h2>
         <button class="modal-close" onclick="closeTLDRModal()">&times;</button>
       </div>
       <div class="modal-body" id="tldrModalBody">
@@ -994,10 +994,14 @@ export function renderHomePage(
       }
     });
 
-    async function generateTLDR(storyId) {
+    async function generateTLDR(storyId, storyTitle) {
       const modal = document.getElementById('tldrModal');
       const modalBody = document.getElementById('tldrModalBody');
+      const modalTitle = document.getElementById('tldrModalTitle');
       const statusEl = document.getElementById('statusMessage');
+      
+      // Update modal title with story title
+      modalTitle.textContent = '📄 ' + storyTitle;
       
       // Show modal with loading state
       modal.classList.add('show');

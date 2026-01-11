@@ -41,7 +41,7 @@ export async function extractArticleContent(url: string): Promise<ExtractedArtic
     });
     
     // Block heavy resources for performance
-    await context.route('**/*.{png,jpg,jpeg,gif,webp,svg,woff,woff2,ttf,otf,mp4,mp3,wav,flac,avi,mov,webm,css}', route => route.abort());
+    // await context.route('**/*.{png,jpg,jpeg,gif,webp,svg,woff,woff2,ttf,otf,mp4,mp3,wav,flac,avi,mov,webm,css}', route => route.abort());
 
     const page = await context.newPage();
     

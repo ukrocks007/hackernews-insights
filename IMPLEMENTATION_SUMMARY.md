@@ -38,8 +38,8 @@ All requirements from the problem statement have been met and code review is cle
    - Error handling
 
 4. **src/dashboard.ts**
-   - Added TLDR button to story rows
-   - Added TLDR modal with loading state
+   - Added TLDR button to story rows (passes story title to modal)
+   - Added TLDR modal with loading state and dynamic title display
    - JavaScript functions for TLDR generation
    - CSS styling for modal and button
 
@@ -108,6 +108,7 @@ All requirements from the problem statement have been met and code review is cle
 ✅ TLDR button (📄) on story rows
 ✅ Only shown for stories with URLs
 ✅ Modal overlay with backdrop blur
+✅ Modal header displays story title
 ✅ Loading spinner with progress message
 ✅ Formatted bullet-point display
 ✅ Metadata footer (model, cache status)

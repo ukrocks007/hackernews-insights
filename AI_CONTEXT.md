@@ -92,11 +92,11 @@ Metadata is displayed inline within the list to aid decision-making without requ
 - **Purpose:** Help users quickly decide whether to read a full article by providing a concise technical summary
 - **Trigger:** User clicks the "📄 TLDR" button next to a story
 - **UI Flow:**
-  1. Button click opens a modal with loading state
-  2. Backend generates TLDR (10-30 seconds)
+  1. Button click opens a modal with the story title displayed in the header
+  2. Modal shows loading state while backend generates TLDR (10-30 seconds)
   3. Modal displays bullet-point summary
   4. Cached TLDRs load instantly on subsequent views
-- **Display:** Modal overlay with formatted TLDR content, model info, and cache status
+- **Display:** Modal overlay with story title in header, formatted TLDR content, model info, and cache status
 - **Integration:** Fully asynchronous, non-blocking, operates independently of review/rating workflow
 
 ### Why Scoring is NOT Shown Prominently

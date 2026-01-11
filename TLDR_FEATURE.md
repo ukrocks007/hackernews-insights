@@ -140,6 +140,7 @@ whether to read the full article.
 
 **TLDR Modal:**
 - Full-screen overlay with backdrop blur
+- Modal header displays the story title
 - Loading state with spinner
 - Formatted display of bullet points
 - Metadata footer showing model and cache status
