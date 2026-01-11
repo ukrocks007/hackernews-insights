@@ -2,9 +2,10 @@ import { chromium, Browser } from 'playwright';
 import logger from './logger';
 
 const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
+// const TLDR_MODEL = 'qwen2.5:0.5b';
 const TLDR_MODEL = 'qwen2.5:0.5b';
 const PAGE_LOAD_TIMEOUT = 15000; // 15 seconds hard timeout
-const MAX_CONTENT_WORDS = 4000; // ~3000-4000 words limit
+const MAX_CONTENT_WORDS = 1200; // Reduced for faster inference
 const MIN_TEXT_CHUNK_LENGTH = 40;
 
 export interface TLDRResult {
@@ -234,7 +235,13 @@ export async function generateTLDR(article: ExtractedArticle): Promise<TLDRResul
     }
     
     // Add main content (truncated to word limit)
-    const mainContent = article.fullText || article.paragraphs.join('\n\n');
+    // Prioritize first 5 paragraphs if available, else use truncated fullText
+    let mainContent = '';
+    if (article.paragraphs.length > 0) {
+      mainContent = article.paragraphs.slice(0, 5).join('\n\n');
+    } else {
+      mainContent = article.fullText;
+    }
     const truncatedContent = truncateToWords(mainContent, MAX_CONTENT_WORDS);
     contentParts.push(`Content: ${truncatedContent}`);
     
@@ -280,7 +287,7 @@ whether to read the full article.`;
       stream: false,
       options: {
         temperature: 0.3, // Low temperature for factual output
-        num_predict: 300  // Limit output length
+        num_predict: 200  // Further limit output length
       }
     };
     

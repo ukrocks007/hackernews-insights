@@ -3,6 +3,8 @@
 ## Overview
 Successfully implemented a user-initiated TLDR feature for the HN Insights dashboard that enables users to generate concise technical summaries of articles using Playwright for content extraction and Ollama (qwen2.5:0.5b) for AI-powered summarization.
 
+Jan 2026: TLDR prompt size and content selection optimized for faster LLM inference and reduced timeouts.
+
 ## Implementation Status: ✅ COMPLETE
 
 All requirements from the problem statement have been met and code review is clean.

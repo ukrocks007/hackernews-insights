@@ -17,7 +17,6 @@ This file is intended to be read by the assistant at the start of each session t
   - Storage and persistence use Prisma + SQLite (`prisma/schema.prisma`, `src/prismaClient.ts`, `src/storage.ts`).
 
 ## High-level Architecture
-- **Multi-source ingestion (code-first registry):**
   - `src/sourceRegistry.ts` defines all sources via `SourceCapability`:
     - Hacker News (structured scraping via Playwright)
     - Hackernoon tag pages (structured scraping via Playwright)
@@ -26,21 +25,18 @@ This file is intended to be read by the assistant at the start of each session t
     - Addy Osmani Blog (structured scraping via Playwright)
     - Optional LLM-guided fallback browsing over arbitrary seed URLs.
   - Each source either has a `structuredIngestor` or is browsed via the LLM-driven fallback browser.
-- **Scraping & content signals:**
   - `src/hnScraper.ts`, `src/hackernoonScraper.ts` scrape candidate stories.
   - `src/contentScraper.ts` turns article pages into structured `ContentSignals` (titles, headings, paragraphs, body text, code-block presence).
-- **LLM relevance & browsing:**
   - `src/relevanceAgent.ts` calls Ollama chat (`/api/chat`) with a tool-call style interface (`save_story`) to decide if a story is relevant and why.
   - `src/fallbackBrowser.ts` uses Playwright plus a small LLM model to drive constrained crawling within an allowlisted domain and surface candidate stories.
-- **Storage, topics, and scoring:**
   - `src/storage.ts` wraps Prisma for stories, relevance scores, topic associations, and suppression state.
   - `src/topicExtractor.ts` implements deterministic topic extraction from title/url/content; `Topic` and `StoryTopic` are modeled in Prisma.
-- **Notifications & feedback:**
   - `src/notifier.ts` sends Pushover notifications for top stories and can include signed feedback links.
   - `src/feedback.ts` signs/validates feedback links (HMAC), persists feedback events, recomputes relevance, and updates topic scores.
   - `src/feedbackServer.ts` + `src/dashboard.ts` expose `/`, `/api/feedback`, `/api/trigger-fetch`, `/api/stories`, `/api/submit-feedback`, `/api/submit-rating`.
 
 ## Dashboard UI & Review Workflow
+    - Jan 2026: TLDR prompt size reduced and content selection optimized for faster LLM inference
 
 The dashboard is now implemented as a client-server architecture:
 

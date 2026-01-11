@@ -12,12 +12,20 @@ The TLDR feature provides user-initiated article summarization for stories in th
 ## Key Characteristics
 
 - **User-Initiated Only**: Never runs automatically; only when explicitly requested
-- **Latency**: 10-30 seconds for generation (acceptable on Raspberry Pi)
+- **Latency**: 5-15 seconds for generation (optimized for speed)
 - **Quality Over Speed**: Optimized for output quality rather than generation speed
 - **Cached Results**: Generated TLDRs are stored in the database
 - **Raspberry Pi Optimized**: Uses lightweight qwen2.5:0.5b model
 
 ## Implementation Details
+
+### Prompt Optimization (Jan 2026)
+
+To reduce LLM inference time and prevent timeouts, the TLDR generator now:
+- Limits content sent to the LLM to 1200 words (was 4000)
+- Prioritizes the first 5 paragraphs and key sections (title, meta, headings)
+- Further restricts model output length
+- Aggressively filters boilerplate and unrelated text
 
 ### Database Schema
 
