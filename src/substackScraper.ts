@@ -14,13 +14,25 @@ export interface SubstackItem {
  * @param limit - Maximum number of posts to scrape
  * @returns Array of SubstackItem with title, url, date, and excerpt
  */
+
+/**
+ * Scrapes a Substack author's archive page for recent posts.
+ * @param usernameOrUrl - The Substack username (e.g., "addyo") or full archive URL (e.g., "https://addyo.substack.com/archive?sort=new")
+ * @param limit - Maximum number of posts to scrape
+ * @returns Array of SubstackItem with title, url, date, and excerpt
+ */
 export async function scrapeSubstackArchive(
-  username: string,
+  usernameOrUrl: string,
   limit: number = 30,
 ): Promise<SubstackItem[]> {
-  const archiveUrl = `https://${username}.substack.com/archive?sort=new`;
+  let archiveUrl: string;
+  if (/^https?:\/\//.test(usernameOrUrl)) {
+    archiveUrl = usernameOrUrl;
+  } else {
+    archiveUrl = `https://${usernameOrUrl}.substack.com/archive?sort=new`;
+  }
   logger.info(
-    `[Substack:${username}] Starting scrape from ${archiveUrl} (limit=${limit})`,
+    `[Substack:${usernameOrUrl}] Starting scrape from ${archiveUrl} (limit=${limit})`,
   );
 
   const browser = await chromium.launch({
@@ -117,10 +129,10 @@ export async function scrapeSubstackArchive(
       )
       .catch(() => [] as SubstackItem[]);
 
-    logger.info(`[Substack:${username}] Scraped ${items.length} posts`);
+    logger.info(`[Substack:${usernameOrUrl}] Scraped ${items.length} posts`);
     return items;
   } catch (err) {
-    logger.error(`Error scraping Substack archive for ${username}: ${err}`);
+    logger.error(`Error scraping Substack archive for ${usernameOrUrl}: ${err}`);
     return [];
   } finally {
     await browser.close();

@@ -398,7 +398,7 @@ Metadata is displayed inline within the list to aid decision-making without requ
     - `ENABLE_GITHUB_BLOG` — set to `'false'` to disable the GitHub Blog structured source (default: `'true'`).
     - `GITHUB_BLOG_DOMAIN_ALLOWLIST` — optional CSV allowlist for GitHub Blog scraping (defaults to `github.blog`).
     - `ENABLE_ADDY_OSMANI_BLOG` — set to `'false'` to disable the Addy Osmani Blog structured source (default: `'true'`).
-    - `SUBSTACK_USERNAMES` — CSV list of Substack usernames to ingest (e.g., `'addyo,example'`). Each username creates a separate source `substack:{username}`.
+    - `SUBSTACK_USERNAMES` — CSV list of Substack usernames **or full Substack archive URLs** to ingest (e.g., `'addyo,https://bytebytego.substack.com/archive?sort=new,https://becomeuncivilized.com/?sort=new'`). Each entry creates a separate source `substack:{username}` where username is extracted from the URL or taken directly.
     - `FALLBACK_SEED_URLS`, `FALLBACK_DOMAIN_ALLOWLIST` — CSV lists for generic fallback browsing.
     - `FALLBACK_MAX_PAGES`, `FALLBACK_MAX_CLICKS`, `FALLBACK_MAX_DEPTH`, `FALLBACK_MAX_CANDIDATES`.
     - `FALLBACK_TIMEOUT_MS`, `FALLBACK_NAV_TIMEOUT_MS`, `FALLBACK_DECISION_TIMEOUT_MS`, `FALLBACK_USER_AGENT`.

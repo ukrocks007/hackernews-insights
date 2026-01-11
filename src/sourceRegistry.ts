@@ -132,9 +132,30 @@ export async function ingestGithubBlogStructured(
   return items.map(normalizeGithubBlogItem);
 }
 
+
+function extractSubstackUsername(entry: string): string {
+  if (/^https?:\/\//.test(entry)) {
+    try {
+      const u = new URL(entry);
+      // Remove www. if present
+      let host = u.hostname.replace(/^www\./, "");
+      // Remove .substack.com or .com/.dev etc.
+      // If substack, take the subdomain; else, take the domain without TLD
+      if (host.endsWith(".substack.com")) {
+        return host.replace(/\.substack\.com$/, "");
+      }
+      // For custom domains, take the domain without TLD
+      return host.split(".")[0];
+    } catch {
+      return "custom";
+    }
+  }
+  return entry;
+}
+
 function normalizeSubstackItem(
   item: SubstackItem,
-  username: string,
+  usernameOrUrl: string,
 ): NormalizedStoryCandidate {
   const description = item.excerpt ?? "";
   const fallbackContent: ContentSignals = {
@@ -146,6 +167,7 @@ function normalizeSubstackItem(
     bodyText: description,
   };
 
+  const username = extractSubstackUsername(usernameOrUrl);
   return {
     id: deriveStoryIdFromUrl(item.url, `substack_${username}`),
     title: item.title,
@@ -160,19 +182,19 @@ function normalizeSubstackItem(
  * Creates a generic Substack ingestor for a given username.
  * This allows multiple Substack authors to be configured without new code.
  */
-export function createSubstackIngestor(username: string): StructuredIngestor {
+export function createSubstackIngestor(usernameOrUrl: string): StructuredIngestor {
   return async (
     options?: StructuredIngestOptions,
   ): Promise<NormalizedStoryCandidate[]> => {
     const limit = options?.limit ?? 30;
     logger.info(
-      `Structured ingest [substack:${username}]: scraping Substack archive`,
+      `Structured ingest [substack:${usernameOrUrl}]: scraping Substack archive`,
     );
-    const items = await scrapeSubstackArchive(username, limit);
+    const items = await scrapeSubstackArchive(usernameOrUrl, limit);
     logger.info(
-      `Structured ingest [substack:${username}]: fetched ${items.length} candidates`,
+      `Structured ingest [substack:${usernameOrUrl}]: fetched ${items.length} candidates`,
     );
-    return items.map((item) => normalizeSubstackItem(item, username));
+    return items.map((item) => normalizeSubstackItem(item, usernameOrUrl));
   };
 }
 
@@ -310,17 +332,29 @@ export function getSourceRegistry(): SourceCapability[] {
   }
 
   // Register Substack sources for each configured username
-  for (const username of substackUsernames) {
+  for (const entry of substackUsernames) {
+    const username = extractSubstackUsername(entry);
+    let domainAllowlist: string[] = [];
+    if (/^https?:\/\//.test(entry)) {
+      try {
+        const u = new URL(entry);
+        domainAllowlist = [u.hostname.replace(/^www\./, "")];
+      } catch {
+        domainAllowlist = [];
+      }
+    } else {
+      domainAllowlist = [`${username}.substack.com`];
+    }
     const substackSource: SourceCapability = {
       sourceId: `substack:${username}`,
       supportsStructuredIngest: true,
-      structuredIngestor: createSubstackIngestor(username),
+      structuredIngestor: createSubstackIngestor(entry),
       fallbackBrowsingAllowed: false,
-      domainAllowlist: [`${username}.substack.com`],
+      domainAllowlist,
     };
     registry.push(substackSource);
     logger.info(
-      `[ingestion] Registered Substack source for username: ${username}`,
+      `[ingestion] Registered Substack source for: ${entry} (username: ${username})`,
     );
   }
 

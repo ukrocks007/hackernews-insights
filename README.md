@@ -82,7 +82,7 @@ curl -sSL https://raw.githubusercontent.com/ukrocks007/hackernews-insights/main/
   # Optional: Configure additional content sources
   ENABLE_GITHUB_BLOG=true
   ENABLE_ADDY_OSMANI_BLOG=true
-  SUBSTACK_USERNAMES=addyo,example  # CSV list of Substack usernames
+  SUBSTACK_USERNAMES=addyo,https://bytebytego.substack.com/archive?sort=new,https://becomeuncivilized.com/?sort=new  # CSV list of Substack usernames or full archive URLs
   ```
 
   - Edit `config/interests.json` to define your topics of interest.
