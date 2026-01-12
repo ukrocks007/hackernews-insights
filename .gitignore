@@ -7,3 +7,5 @@ cron.log
 logs/
 *.log
 .pm2/
+db/hn_bak.sqlite
+db/hn.sqlite-journal
