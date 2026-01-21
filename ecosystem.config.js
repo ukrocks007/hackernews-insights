@@ -29,6 +29,7 @@ module.exports = {
 
       env: {
         NODE_ENV: "production",
+        FEEDBACK_PORT: 3001,
       },
     },
   ],
