@@ -67,36 +67,32 @@ function resolveCandidateDate(candidate: NormalizedStoryCandidate): string {
 async function processCandidate(
   candidate: NormalizedStoryCandidate,
 ): Promise<boolean> {
+  logger.info(`[processCandidate] BEGIN: ${candidate.title} (${candidate.id})`);
   const duplicate = await hasStoryBeenProcessed(candidate.id);
   if (duplicate) {
-    logger.info(
-      `Story ${candidate.id} ("${candidate.title}") already processed. Skipping.`,
-    );
+    logger.info(`[processCandidate] Already processed. Skipping: ${candidate.title} (${candidate.id})`);
     return false;
   }
 
   if (isBelowScoreThreshold(candidate)) {
-    logger.info(
-      `Pre-filter: Rejected "${candidate.title}" (Score ${candidate.score} < ${MIN_HN_SCORE})`,
-    );
+    logger.info(`[processCandidate] Pre-filtered (score too low): ${candidate.title} (Score ${candidate.score} < ${MIN_HN_SCORE})`);
     return false;
   }
 
-  const content =
-    candidate.content ?? (await scrapeStoryContent(candidate.url));
+  logger.info(`[processCandidate] Fetching content for: ${candidate.title}`);
+  const content = candidate.content ?? (await scrapeStoryContent(candidate.url));
 
   if (!content) {
-    logger.warn(
-      `Skipping "${candidate.title}" (Content fetch failed or skipped)`,
-    );
+    logger.warn(`[processCandidate] Content fetch failed or skipped: ${candidate.title}`);
     return false;
   }
 
+  logger.info(`[processCandidate] Checking relevance for: ${candidate.title}`);
   const relevanceInput = toScrapedStory(candidate);
   const result = await checkRelevance(relevanceInput, content);
 
   if (result) {
-    logger.info(`MATCH: ${candidate.title} - ${result.reason}`);
+    logger.info(`[processCandidate] RELEVANT: ${candidate.title} - Reason: ${result.reason}`);
 
     // Prefer the page's HTML title for Hackernoon items since tag-list titles
     // can be identical to the URL slug. Use scraped `pageTitle` when present.
@@ -117,6 +113,7 @@ async function processCandidate(
       notificationSent: false,
     };
 
+    logger.info(`[processCandidate] Extracting topics for: ${candidate.title}`);
     // --- Topic extraction and association ---
     const extracted = extractTopics(fullStory.title, fullStory.url || "", content);
     // Convert to TopicInput[] with source info
@@ -125,11 +122,13 @@ async function processCandidate(
       source: "content" as const,
     }));
 
+    logger.info(`[processCandidate] Saving story: ${candidate.title}`);
     await saveStory(fullStory, topics);
+    logger.info(`[processCandidate] DONE: ${candidate.title} (saved as relevant)`);
     return true;
   }
 
-  logger.info(`IGNORE: ${candidate.title}`);
+  logger.info(`[processCandidate] NOT RELEVANT: ${candidate.title}`);
   return false;
 }
 
