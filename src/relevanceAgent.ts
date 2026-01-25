@@ -8,7 +8,7 @@ import logger from "./logger";
 dotenv.config();
 
 const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || "http://localhost:11434";
-const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "functiongemma";
+const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "qwen2.5:0.5b";
 
 // Deterministic Filters
 export const MIN_HN_SCORE = 100;
@@ -64,7 +64,7 @@ export async function checkRelevance(
   ].join("\n- ");
 
   const systemPrompt = `You are a relevance filter for Hacker News stories.
-Decide whether a news story strongly matches the user's interests.
+Decide whether a news story strongly matches the user's interests (${interests.join(", ")}).
 You MUST NOT assign numeric scores.
 You MUST NOT rank or compare stories.
 If relevant, CALL save_story with a one-sentence reason.
@@ -107,6 +107,7 @@ Content signals:
   };
 
   try {
+    const startTime = Date.now();
     const response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -123,6 +124,9 @@ Content signals:
     }
 
     const data = await response.json();
+    const duration = Date.now() - startTime;
+    logger.info(`[checkRelevance] LLM inference completed in ${duration}ms for story "${story.title}"`);
+
     const message = data.message;
 
     if (message.tool_calls && message.tool_calls.length > 0) {
