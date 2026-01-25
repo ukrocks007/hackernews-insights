@@ -114,9 +114,12 @@ Content signals:
     });
 
     if (!response.ok) {
-      throw new Error(
-        `Ollama API error: ${response.status} ${response.statusText}`,
+      logger.warn(
+        `Ollama API error (fail-open): ${response.status} ${response.statusText} for story "${story.title}". Treating as NOT relevant.`,
       );
+      return {
+        reason: "",
+      }
     }
 
     const data = await response.json();
@@ -140,9 +143,12 @@ Content signals:
     // Fallback if LLM talks without calling tool or saying IGNORE (treat as ignore)
     return null;
   } catch (error) {
-    logger.error(
-      `Error checking relevance for story "${story.title}": ${error}`,
+    logger.warn(
+      `Fail-open: Error checking relevance for story "${story.title}": ${error}. Treating as NOT relevant.`,
     );
-    throw error;
+    // Fail open: treat as not relevant, but do NOT throw or crash
+    return {
+      reason: "",
+    }
   }
 }
